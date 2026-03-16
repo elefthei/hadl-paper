@@ -1,0 +1,29 @@
+%%%%%%%%%%%%% Packages
+\usepackage[utf8]{inputenc}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{subcaption}
+\graphicspath{{figures/}}
+\usepackage{changepage}
+\usepackage{etoolbox}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xspace}
+\usepackage[true]{anonymous-acm} % For anonymous submission; change to 'false' for camera-ready
+\usetikzlibrary{shapes.geometric, shapes.multipart, arrows.meta, positioning, calc, backgrounds, patterns, decorations.pathreplacing}
+
+%%%%%%%%%%%%%% Comments
+\usepackage[]{comments} % add option 'hide' to hide all
+\Commenter{lef}
+
+%%%%%%%%%%%%% Reference macros
+\newcommand{\sect}[1]{Section~\ref{#1}\xspace}
+\newcommand{\figr}[1]{Figure~\ref{#1}\xspace}
+\newcommand{\tabl}[1]{Table~\ref{#1}\xspace}
+\newcommand{\defn}[1]{Definition~\ref{#1}\xspace}
+\newtheorem{definition}{Definition}
+
+%%%%%%%%%%%%% Custom terms
+\newcommand{\hadl}{HADL\xspace}

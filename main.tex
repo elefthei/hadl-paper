@@ -1,0 +1,66 @@
+\documentclass[acmsmall,screen,review]{acmart}
+\input{lib}
+
+%% Bibliography style
+\citestyle{acmauthoryear}
+
+%% Remove ACM-specific metadata for submission
+\settopmatter{printfolios=true,printccs=false,printacmref=true}
+
+%% Document metadata
+\acmJournal{PACMPL}
+\acmVolume{0}
+\acmNumber{PLDI}
+\acmArticle{0}
+\acmYear{2026}
+\acmMonth{6}
+\acmDOI{}
+
+%% Copyright - for submission
+\setcopyright{none}
+
+\begin{document}
+
+\title{Hierarchical Agentic Dataflow Language: Plans All the Way Down}
+
+\authoranon{
+\author{First Author}
+\affiliation{%
+  \institution{Institution}
+  \city{City}
+  \state{State}
+  \country{Country}
+}
+\email{first@example.com}
+
+\author{Second Author}
+\affiliation{%
+  \institution{Institution}
+  \city{City}
+  \state{State}
+  \country{Country}
+}
+\email{second@example.com}
+}
+
+\keywords{TODO}
+
+\begin{abstract}
+  TODO: Write abstract.
+\end{abstract}
+
+\maketitle
+
+\input{intro}
+\input{overview}
+\input{design}
+\input{implementation}
+\input{evaluation}
+\input{related}
+\input{conclusion}
+
+%% Bibliography
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+\end{document}
