@@ -1,6 +1,33 @@
 \documentclass[acmsmall,screen,review]{acmart}
 \input{lib}
 
+%% Listings setup for HADL code examples
+\usepackage{listings}
+\usepackage{color}
+\lstdefinelanguage{hadl}{
+  keywords={workflow, let, var, tool, agent, user, if, else, while, for, in, type},
+  keywordstyle=\bfseries,
+  sensitive=true,
+  comment=[l]{//},
+  morestring=[b]",
+  stringstyle=\itshape,
+}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  xleftmargin=2em,
+  frame=single,
+  framesep=3pt,
+  aboveskip=1em,
+  belowskip=1em,
+  escapeinside={(*@}{@*)},
+}
+
 %% Bibliography style
 \citestyle{acmauthoryear}
 
