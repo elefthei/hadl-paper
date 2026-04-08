@@ -1,12 +1,12 @@
 \section{Design}
 \label{sec:design}
 
-This section formalizes the HADL type system. We present the abstract syntax, the type language and subtyping relation, the typing rules, and the staged gradual type checking mechanism that connects the static type system to runtime schema resolution.
+This section presents the HADL type system and the gradual generation mechanism that unifies type generation, workflow generation, and policy generation under a single pattern. We describe the abstract syntax, the correspondence between HADL types and JavaScript types, and the three forms of gradual generation that allow LLMs to produce types, programs, and authorization policies at runtime.
 
 \subsection{Syntax}
 \label{sec:design-syntax}
 
-Figure~\ref{fig:syntax} presents the abstract syntax of HADL. A program $P$ consists of a sequence of pragmas $\pi$ followed by a sequence of declarations $d$. Pragmas configure runtime behavior without affecting the type system. A declaration is either a workflow declaration, which introduces a named, typed function with parameters and a body expression, or a type declaration, which introduces a named type alias. Types include the unit type $()$, three base types (\texttt{String}, \texttt{Size}, \texttt{Bool}), the gradually-typed \texttt{Schema}, curried arrow types $(T_1 \to T_2)$, and named references $X$ to type declarations or schema-typed variables. Expressions include literals, variable references, immutable and mutable bindings (with optional type annotations), assignment, control flow (\texttt{if}, \texttt{while}, \texttt{for}), the three domain-specific primitives (\texttt{user}, \texttt{tool}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), comparison operators, and sequencing.
+Figure~\ref{fig:syntax} presents the abstract syntax of HADL. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types for workflows, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the three domain-specific primitives (\texttt{user}, \texttt{tool}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{tool} and \texttt{agent} expressions accepts either a string literal or a variable reference for dynamic principal resolution.
 
 \begin{figure}[t]
 \[\begin{array}{rcll}
@@ -16,7 +16,8 @@ P & ::= & \pi^*\; d^* & \textit{program} \\[4pt]
 d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow declaration} \\
   & \mid & \texttt{type}\; X = T & \textit{type declaration} \\[4pt]
 T & ::= & () \mid \texttt{String} \mid \texttt{Size} \mid \texttt{Bool} & \textit{base types} \\
-  & \mid & \texttt{Schema} & \textit{gradually-typed unknown} \\
+  & \mid & \texttt{Schema} & \textit{type of types} \\
+  & \mid & \texttt{Policy} & \textit{authorization policy} \\
   & \mid & (T_1 \to T_2) & \textit{arrow type} \\
   & \mid & X & \textit{named type reference} \\[4pt]
 e & ::= & s \mid n \mid b & \textit{literals} \\
@@ -28,153 +29,30 @@ e & ::= & s \mid n \mid b & \textit{literals} \\
   & \mid & \texttt{while}\; (e)\; \{e\} & \textit{loop} \\
   & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \textit{iteration} \\
   & \mid & \texttt{user}\; s & \textit{human prompt} \\
-  & \mid & \texttt{tool}\; s\; [\texttt{as}\; s] & \textit{LLM tool call} \\
-  & \mid & \texttt{agent}\; s\; [\texttt{as}\; s] & \textit{LLM agent call} \\
+  & \mid & \texttt{tool}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM tool call} \\
+  & \mid & \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM agent call} \\
   & \mid & \texttt{js}\; c & \textit{JavaScript expression} \\
   & \mid & \texttt{eval}\; e\;(e_1, \ldots, e_k) & \textit{workflow invocation} \\
+  & \mid & \texttt{enforce}\; x & \textit{policy activation} \\
   & \mid & e_1 \;\mathit{op}\; e_2 & \textit{comparison} \\
   & \mid & e_1 ;\; e_2 & \textit{sequencing} \\[4pt]
 \mathit{op} & ::= & \texttt{==} \mid \texttt{!=} \mid \texttt{<} \mid \texttt{<=} \mid \texttt{>} \mid \texttt{>=} & \textit{comparison operators}
 \end{array}\]
-\caption{Abstract syntax of HADL. Square brackets denote optional components. Overlined parameters $\overline{x_i{:}T_i}$ denote a possibly empty sequence. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string literals, size literals, boolean literals, JavaScript code, variable names, workflow names, and type names respectively.}
+\caption{Abstract syntax of HADL. Square brackets denote optional components. The notation $(s \mid x)$ in the \texttt{as} clause indicates that the principal can be either a string literal or a variable reference. Overlined parameters $\overline{x_i{:}T_i}$ denote a possibly empty sequence. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string literals, unsigned integer literals, boolean literals, JavaScript code, variable names, workflow names, and type names respectively.}
 \label{fig:syntax}
 \end{figure}
 
+HADL's base types correspond to JavaScript types (\texttt{String}$\to$\texttt{string}, \texttt{Size}$\to$\texttt{number}, \texttt{Bool}$\to$\texttt{boolean}, $()$$\to$\texttt{null}), and all runtime values are represented as JSON. The type checker uses type inference with subsumption. \texttt{tool} and \texttt{js} expressions are treated as oracles that can produce any type, requiring explicit type annotations at binding sites. Three types play a special role in gradual generation: \texttt{Schema} is the \emph{type of types}, arrow types $(T_1 \to T_2)$ are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
 
-\subsection{Types and Subtyping}
-\label{sec:design-subtyping}
+\subsection{Gradual Generation}
+\label{sec:design-gradual}
 
-The type language consists of four base types, the gradually-typed \texttt{Schema}, arrow types, and named type references. The unit type $()$ represents expressions evaluated for side effects. \texttt{String} is the type of text values, including all outputs from \texttt{user} and \texttt{agent} expressions. \texttt{Size} is the type of non-negative integers. \texttt{Bool} is the type of boolean values and comparison results. \texttt{Schema} is the gradually-typed unknown, representing values whose concrete type will be determined at runtime by an LLM tool call. Arrow types $(T_1 \to T_2)$ represent workflow function types and are constructed by currying the parameter list of a workflow declaration. Named types $X$ refer to either a \texttt{type} declaration or a schema-typed variable whose concrete type has been registered at runtime.
+HADL addresses the inherently dynamic nature of LLM outputs through \emph{gradual generation}, in which three type annotations (\texttt{Schema}, arrow types, and \texttt{Policy}) signal that the annotated value will be generated by the LLM at runtime. \texttt{Schema} is treated as universally compatible during static checking, inspired by the unknown type in gradual typing~\cite{siek2006gradual}, but rather than inserting casts at boundaries, HADL re-invokes the type checker over downstream code when concrete types materialize. When such a value materializes, the runtime validates it, installs it into the execution context, and enforces it over the remainder of the program. All three forms share provenance-driven self-healing that retries the causal tool call if validation fails.
 
-\paragraph{Type resolution.} Before subtyping or checking, named types are resolved through the type environment. A named type $X$ is first looked up in the type declarations. If found, the result is recursively resolved. If $X$ is not a type declaration but is a variable with type \texttt{Schema} in the environment, resolution returns \texttt{Schema}, reflecting that the concrete type of this variable is deferred to runtime. Arrow types are resolved recursively in both components. If $X$ is neither declared nor a schema-typed variable, a type error is reported.
+\subsubsection{Gradual Type Generation}
+\label{sec:design-gradual-types}
 
-\paragraph{Subtyping.} Figure~\ref{fig:subtyping} defines the subtyping relation $T_1 \leq T_2$. The relation is reflexive on each base type (\textsc{S-Unit} through \textsc{S-Schema}). The key rules for gradual typing are \textsc{S-Schema-L} and \textsc{S-Schema-R}, which make \texttt{Schema} compatible with every type in both directions. This allows schema-typed values to flow to any position at compile time, deferring the actual type check to runtime when the schema is resolved. Arrow subtyping (\textsc{S-Arrow}) follows standard variance conventions, contravariant in the argument and covariant in the return type.
-
-\begin{figure}[t]
-\begin{mathpar}
-\inferrule*[right=S-Unit]{ }{() \leq ()}
-\and
-\inferrule*[right=S-String]{ }{\texttt{String} \leq \texttt{String}}
-\and
-\inferrule*[right=S-Size]{ }{\texttt{Size} \leq \texttt{Size}}
-\and
-\inferrule*[right=S-Bool]{ }{\texttt{Bool} \leq \texttt{Bool}}
-\and
-\inferrule*[right=S-Schema]{ }{\texttt{Schema} \leq \texttt{Schema}}
-\and
-\inferrule*[right=S-Schema-L]{ }{\texttt{Schema} \leq T}
-\and
-\inferrule*[right=S-Schema-R]{ }{T \leq \texttt{Schema}}
-\and
-\inferrule*[right=S-Arrow]{A_2 \leq A_1 \\ R_1 \leq R_2}{(A_1 \to R_1) \leq (A_2 \to R_2)}
-\end{mathpar}
-\caption{Subtyping rules. \textsc{S-Schema-L} and \textsc{S-Schema-R} make \texttt{Schema} the gradually-typed unknown, compatible with all types. Concrete type checking is deferred to runtime when the schema value is resolved.}
-\label{fig:subtyping}
-\end{figure}
-
-
-\subsection{Typing Rules}
-\label{sec:design-typing}
-
-The type checker operates in two modes, expressed as two judgments. The \emph{synthesis} judgment $\Gamma \vdash e \Rightarrow T$ takes an environment and an expression and produces a type. The \emph{checking} judgment $\Gamma \vdash e \Leftarrow T$ takes an environment, an expression, and an expected type, and validates that the expression is compatible. The type environment $\Gamma$ maps variable names to pairs of type and mutability, and also records type declarations.
-
-Because the type checker modifies the environment imperatively (each binding extends $\Gamma$ for subsequent expressions in a sequence), we write $\Gamma \vdash e \Rightarrow T \dashv \Gamma'$ when a rule extends the environment, and $\Gamma \vdash e \Rightarrow T$ when it does not. In practice, the sequencing rule threads the environment left-to-right through a sequence of expressions.
-
-\paragraph{Synthesis rules.} Figure~\ref{fig:typing-synth} presents the synthesis rules.
-
-Literals synthesize their corresponding base types (\textsc{Syn-String}, \textsc{Syn-Size}, \textsc{Syn-Bool}). Variable references look up the type in the environment (\textsc{Syn-Var}).
-
-The binding rules (\textsc{Syn-Bind-Ann} and \textsc{Syn-Bind-Infer}) formalize the interaction between type annotations and the oracle rule. When a type annotation is present and the value expression is not an oracle, the value is checked against the resolved annotation (\textsc{Syn-Bind-Ann}, first premise). When the value is an oracle (a \texttt{tool} or \texttt{js} expression), the checking premise is skipped entirely, and the annotation is trusted as the type of the binding. This captures the fact that LLM outputs cannot be statically verified and the developer's annotation serves as the sole source of type information. When no annotation is present (\textsc{Syn-Bind-Infer}), the type is synthesized from the value expression. Since \texttt{tool} and \texttt{js} expressions cannot synthesize a type without an annotation (rules \textsc{Syn-Tool} and \textsc{Syn-Js}), the lack of an annotation on these expressions is a compile-time error.
-
-\texttt{user} and \texttt{agent} expressions always synthesize \texttt{String} (\textsc{Syn-User}). \texttt{tool} and \texttt{js} expressions fail in synthesis mode (\textsc{Syn-Tool}, \textsc{Syn-Js}), requiring an annotation at the binding site to proceed.
-
-Assignment (\textsc{Syn-Assign}) verifies that the target variable is mutable and checks the new value against the variable's declared type. Sequencing (\textsc{Syn-Seq}) threads the environment left-to-right and returns the type of the last expression.
-
-Conditionals (\textsc{Syn-If}) check the condition against \texttt{Bool}, synthesize the then-branch, and check the else-branch against the then-branch type. When no else-branch is present, the result type is $()$. Loops (\textsc{Syn-While}) check the condition against \texttt{Bool} and return $()$. Iteration (\textsc{Syn-For}) requires the collection to have type \texttt{Schema} (since array types are represented as \texttt{Schema} at compile time), binds the iteration variable as \texttt{Schema}, and returns \texttt{Schema}.
-
-Workflow invocation (\textsc{Syn-Eval}) synthesizes the type of the function expression. If the type is an arrow $(A \to R)$, the argument is checked against $A$ and the result type is $R$. If the type is \texttt{Schema}, the result is \texttt{Schema}, deferring the check to runtime.
-
-Comparison operators (\textsc{Syn-Cmp}) synthesize the left operand, check the right operand against the left type, and return \texttt{Bool}.
-
-\begin{figure}[t]
-\begin{mathpar}
-\inferrule*[right=Syn-String]{ }{\Gamma \vdash s \Rightarrow \texttt{String}}
-\and
-\inferrule*[right=Syn-Size]{ }{\Gamma \vdash n \Rightarrow \texttt{Size}}
-\and
-\inferrule*[right=Syn-Bool]{ }{\Gamma \vdash b \Rightarrow \texttt{Bool}}
-\and
-\inferrule*[right=Syn-Var]{\Gamma(x) = (T, \_)}{\Gamma \vdash x \Rightarrow T}
-\and
-\inferrule*[right=Syn-Bind-Ann]{\mathit{resolve}(\Gamma, T) = T' \\ \neg\mathit{oracle}(e) \Rightarrow \Gamma \vdash e \Leftarrow T'}{\Gamma \vdash \texttt{let}\; x {:} T = e \Rightarrow () \dashv \Gamma, x{:}(T', m)}
-\and
-\inferrule*[right=Syn-Bind-Infer]{\Gamma \vdash e \Rightarrow T}{\Gamma \vdash \texttt{let}\; x = e \Rightarrow () \dashv \Gamma, x{:}(T, m)}
-\and
-\inferrule*[right=Syn-User]{ }{\Gamma \vdash \texttt{user}\; s \Rightarrow \texttt{String}}
-\and
-\inferrule*[right=Syn-Tool]{ }{\Gamma \vdash \texttt{tool}\; s \Rightarrow \mathbf{error}}
-\and
-\inferrule*[right=Syn-Js]{ }{\Gamma \vdash \texttt{js}\; c \Rightarrow \mathbf{error}}
-\and
-\inferrule*[right=Syn-Assign]{\Gamma(x) = (T, \textit{mut}) \\ \Gamma \vdash e \Leftarrow T}{\Gamma \vdash x = e \Rightarrow ()}
-\and
-\inferrule*[right=Syn-Seq]{\Gamma \vdash e_1 \Rightarrow T_1 \dashv \Gamma_1 \\ \Gamma_1 \vdash e_2 \Rightarrow T_2}{\Gamma \vdash e_1;\; e_2 \Rightarrow T_2}
-\and
-\inferrule*[right=Syn-If]{\Gamma \vdash e_c \Leftarrow \texttt{Bool} \\ \Gamma \vdash e_t \Rightarrow T \\ \Gamma \vdash e_f \Leftarrow T}{\Gamma \vdash \texttt{if}\;(e_c)\;\{e_t\}\;\texttt{else}\;\{e_f\} \Rightarrow T}
-\and
-\inferrule*[right=Syn-While]{\Gamma \vdash e_c \Leftarrow \texttt{Bool} \\ \Gamma \vdash e_b \Rightarrow \_}{\Gamma \vdash \texttt{while}\;(e_c)\;\{e_b\} \Rightarrow ()}
-\and
-\inferrule*[right=Syn-For]{\Gamma \vdash e_c \Rightarrow \texttt{Schema}}{\Gamma, x{:}(\texttt{Schema}, \textit{imm}) \vdash \texttt{for}\; x\; \texttt{in}\; e_c \;\{e_b\} \Rightarrow \texttt{Schema}}
-\and
-\inferrule*[right=Syn-Eval]{\Gamma \vdash e_f \Rightarrow (A \to R) \\ \Gamma \vdash e_a \Leftarrow A}{\Gamma \vdash \texttt{eval}\; e_f\;(e_a) \Rightarrow R}
-\and
-\inferrule*[right=Syn-Cmp]{\Gamma \vdash e_1 \Rightarrow T \\ \Gamma \vdash e_2 \Leftarrow T}{\Gamma \vdash e_1 \;\mathit{op}\; e_2 \Rightarrow \texttt{Bool}}
-\end{mathpar}
-\caption{Synthesis rules. The notation $\Gamma \vdash e \Rightarrow T \dashv \Gamma'$ indicates that the rule extends the environment. In \textsc{Syn-Bind-Ann}, the checking premise is applied only when $\neg\mathit{oracle}(e)$ holds. When $\mathit{oracle}(e)$ is true (\texttt{tool} or \texttt{js} expressions), the annotation type is trusted without verification. The mutability marker $m$ is \textit{imm} for \texttt{let} and \textit{mut} for \texttt{var}.}
-\label{fig:typing-synth}
-\end{figure}
-
-\paragraph{Checking rules.} Figure~\ref{fig:typing-check} presents the checking rules. The oracle rule (\textsc{Chk-Oracle}) is the most distinctive. When checking a \texttt{tool} or \texttt{js} expression against an expected type, the check succeeds unconditionally. This formalizes the treatment of LLM tool calls as type-theoretic oracles whose output type is determined by the developer's annotation rather than by static analysis of the expression.
-
-Sequence checking (\textsc{Chk-Seq}) synthesizes all expressions except the last, then checks the last against the expected type. This allows type information to flow backward through sequences. Conditional checking (\textsc{Chk-If}) propagates the expected type into both branches, allowing both to be checked against the same target type. Loop and iteration checking (\textsc{Chk-While}, \textsc{Chk-For}) accept any expected type, since these expressions are evaluated for side effects.
-
-The subsumption rule (\textsc{Chk-Sub}) is the bridge between the two modes. When no other checking rule applies, the type checker synthesizes a type for the expression and verifies that the synthesized type is a subtype of the expected type.
-
-\begin{figure}[t]
-\begin{mathpar}
-\inferrule*[right=Chk-Oracle]{\mathit{oracle}(e)}{\Gamma \vdash e \Leftarrow T}
-\and
-\inferrule*[right=Chk-Seq]{\Gamma \vdash e_1 \Rightarrow \_ \dashv \Gamma_1 \\ \Gamma_1 \vdash e_2 \Leftarrow T}{\Gamma \vdash e_1;\; e_2 \Leftarrow T}
-\and
-\inferrule*[right=Chk-If]{\Gamma \vdash e_c \Leftarrow \texttt{Bool} \\ \Gamma \vdash e_t \Leftarrow T \\ \Gamma \vdash e_f \Leftarrow T}{\Gamma \vdash \texttt{if}\;(e_c)\;\{e_t\}\;\texttt{else}\;\{e_f\} \Leftarrow T}
-\and
-\inferrule*[right=Chk-While]{\Gamma \vdash e_c \Leftarrow \texttt{Bool} \\ \Gamma \vdash e_b \Rightarrow \_}{\Gamma \vdash \texttt{while}\;(e_c)\;\{e_b\} \Leftarrow T}
-\and
-\inferrule*[right=Chk-For]{\Gamma \vdash e_c \Rightarrow \texttt{Schema} \\ \Gamma, x{:}(\texttt{Schema}, \textit{imm}) \vdash e_b \Rightarrow \_}{\Gamma \vdash \texttt{for}\; x\; \texttt{in}\; e_c \;\{e_b\} \Leftarrow T}
-\and
-\inferrule*[right=Chk-Sub]{\Gamma \vdash e \Rightarrow S \\ S \leq T}{\Gamma \vdash e \Leftarrow T}
-\end{mathpar}
-\caption{Checking rules. \textsc{Chk-Oracle} accepts any expected type for \texttt{tool} and \texttt{js} expressions. \textsc{Chk-Sub} bridges synthesis and checking via subtyping.}
-\label{fig:typing-check}
-\end{figure}
-
-\paragraph{Program checking.} The type checker processes an entire program in two passes. In the first pass, it collects all declarations into the environment. For each \texttt{type} declaration $\texttt{type}\; X = T$, the type $T$ is registered under the name $X$. For each workflow declaration $\texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\}$, a curried arrow type is constructed by folding the parameter types right-to-left:
-
-\[
-\mathit{wftype}(x_1{:}T_1, \ldots, x_k{:}T_k, T) = T_1 \to (T_2 \to (\cdots \to (T_k \to T)))
-\]
-
-This curried type is bound to the workflow name $f$ in the environment, making workflows available as typed values for use in \texttt{eval} expressions.
-
-In the second pass, the type checker verifies each workflow body. For a workflow $\texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\;\{e\}$, the checker resolves the return type $T$ in the current environment, binds the parameters $x_i{:}T_i$ as immutable, and checks the body against the resolved return type. Formally, $\Gamma, \overline{x_i{:}(T_i, \textit{imm})} \vdash e \Leftarrow T$. If the check fails, a type error with the conflicting types and their source locations is reported.
-
-
-\subsection{Staged Gradual Type Checking}
-\label{sec:design-staged}
-
-The subtyping rules \textsc{S-Schema-L} and \textsc{S-Schema-R} allow \texttt{Schema}-typed values to pass through the compile-time type checker without constraint. This is intentional, since the concrete type of a schema-typed variable is determined by an LLM at runtime and does not exist at compile time. The staged gradual type checking mechanism bridges this gap by re-invoking the type checker at runtime whenever a schema value materializes.
-
-\paragraph{The schema-to-type mapping.} When an LLM tool call produces a JSON Schema value at runtime, the interpreter converts it to a HADL type using the mapping $\sigma$ defined in Figure~\ref{fig:schema-to-type}. Primitive JSON Schema types map to their HADL counterparts. Compound types (arrays, objects, and recursive references) map to \texttt{Schema}, since the compile-time type language does not include record or array types. This means that the staged re-check validates the overall type structure of downstream expressions but does not statically verify field-level access on objects. Field-level property access is performed by the embedded JavaScript engine at runtime, operating on the underlying JSON values.
+A \texttt{tool} call annotated with \texttt{Schema} produces a JSON Schema value at runtime, providing a structured specification of fields, their types, and their constraints. Because the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible, meaning both $T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ hold for all types $T$. This allows \texttt{Schema}-annotated bindings to pass static checking while deferring actual type verification to runtime. When a schema materializes, the interpreter converts it to a concrete HADL type using the mapping $\sigma$ defined in Figure~\ref{fig:schema-to-type}, registers it in the type environment, and re-invokes the type checker over the remaining program before execution resumes.
 
 \begin{figure}[t]
 \[
@@ -186,20 +64,22 @@ The subtyping rules \textsc{S-Schema-L} and \textsc{S-Schema-R} allow \texttt{Sc
 \texttt{Schema} & \text{if } \tau = \texttt{array} \text{ or } \tau = \texttt{object} \text{ or } \tau = \texttt{\$ref}
 \end{cases}
 \]
-\caption{The schema-to-type mapping $\sigma$. Converts a runtime JSON Schema type $\tau$ into a compile-time HADL type. Primitive schemas map to concrete HADL types. Compound schemas remain as \texttt{Schema}.}
+\caption{The schema-to-type mapping $\sigma$. Converts a runtime JSON Schema type $\tau$ into a HADL type. Primitive schemas map to concrete HADL types. Compound schemas (arrays, objects, references) remain as \texttt{Schema}.}
 \label{fig:schema-to-type}
 \end{figure}
 
-\paragraph{Runtime re-checking algorithm.} The staged re-check is triggered during the evaluation of expression sequences. When the interpreter evaluates a binding of the form $\texttt{let}\; x {:} \texttt{Schema} = e$ and the tool call $e$ produces a JSON Schema value, the following steps execute.
+The schema value can then appear in type annotation position for subsequent bindings. For example, in the binding \texttt{let booking: form\_schema = tool "..."}, the variable \texttt{form\_schema} holds a schema value whose materialized type governs the type of \texttt{booking}. When such a binding is evaluated, the interpreter deserializes the LLM's response as a JSON Schema, converts it to a concrete HADL type via $\sigma$, registers the type in the environment so that the variable can be used in type annotation positions, and re-invokes the type checker over the remaining expressions. When a schema-typed variable is mutated via assignment, the same process re-parses and re-checks. If re-checking fails and the \texttt{@retries} pragma is active, provenance tracking identifies the causal tool call and re-invokes it with the type error as feedback, up to the declared retry limit.
 
-\begin{enumerate}
-\item The interpreter deserializes the LLM's response as a JSON Schema value.
-\item The mapping $\sigma$ converts the schema to a concrete HADL type $T$.
-\item The type $T$ is registered in the environment as the concrete type for variable $x$.
-\item A new type environment $\Gamma'$ is constructed from the current runtime state. For each variable in scope, its type is determined from its runtime value (or from its registered schema type if one exists). Resolved schema types are also registered as type declarations, so that $x$ can be used in type annotation positions in subsequent bindings.
-\item The type checker is re-invoked in synthesis mode over the remaining expressions in the sequence, using $\Gamma'$.
-\end{enumerate}
+The staged mechanism provides two guarantees. First, at compile time, all statically known types are verified before any LLM call is made. Second, at runtime, the type checker is re-invoked with the concrete schema type substituted into the environment, verifying that downstream bindings are consistent with the materialized type. Compound JSON Schema types map to \texttt{Schema} under $\sigma$, so field-level property access is performed by the JavaScript engine at runtime on the underlying JSON values.
 
-When a schema-typed variable is mutated via assignment, the interpreter re-parses the new value as a JSON Schema, updates the registered concrete type via $\sigma$, and triggers an authoritative re-check of the remaining expressions. If this re-check fails and the \texttt{@retries} pragma is active, the self-healing mechanism identifies the causal tool call through provenance tracking and re-invokes it with the type error as feedback. We describe the self-healing mechanism and provenance tracking in detail in Section~\ref{sec:implementation}.
+\subsubsection{Gradual Workflow Generation}
+\label{sec:design-gradual-workflows}
 
-\paragraph{Guarantees and limitations.} The staged mechanism provides two guarantees. First, at compile time, all statically known types are verified before any LLM call is made, catching undefined variables, type mismatches, and missing annotations. Second, at runtime, the type checker is re-invoked with the concrete schema type substituted into the environment, verifying that downstream bindings and subtyping relationships are consistent with the materialized type. The main limitation is that compound JSON Schema types (objects and arrays) map to \texttt{Schema} under $\sigma$, so the re-check does not verify field-level structure at the HADL type level. Field access on schema-typed objects is performed by the JavaScript engine at runtime, and structural validation of JSON values against their schemas is handled by the runtime schema system described in Section~\ref{sec:implementation}.
+A \texttt{tool} call annotated with an arrow type such as \texttt{(String -> Size)} instructs the LLM to produce a complete HADL workflow as structured output. The entire HADL AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program} containing a workflow declaration with typed parameters and a body. The \texttt{eval} expression deserializes this value, validates it, and executes it within the current interpreter context with closure-like semantics. At the type level, if the function type is an arrow $(A \to R)$, arguments are checked against $A$ and the result type is $R$; if the type is \texttt{Schema}, checking is deferred to runtime. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM, and the generated workflow is a full typed program that the type checker can verify at the call site.
+
+\subsubsection{Gradual Policy Generation}
+\label{sec:design-gradual-policies}
+
+A \texttt{tool} call annotated with \texttt{Policy} instructs the LLM to produce a Cedar authorization policy as a JSON value at runtime. Gradual policy generation separates policy \emph{generation} from policy \emph{activation}: a \texttt{Policy}-annotated binding stores the generated policy without activating it, and the explicit \texttt{enforce} expression installs it in the runtime. Because \texttt{enforce} is an ordinary expression, it can appear inside conditional branches, enabling human-in-the-loop approval. The type checker verifies at compile time that \texttt{enforce} targets a \texttt{Policy}-typed variable, and the expression returns~$()$.
+
+Installation enforces four invariants. First, a \emph{deny-all guard} rejects any blanket \texttt{forbid} rule that would block all operations. Second, \emph{action type validation} rejects unknown action types before they reach Cedar. Third, policies are merged \emph{append-only}: new rules can tighten access but cannot remove existing rules, and Cedar's \texttt{forbid}-over-\texttt{permit} precedence guarantees that restrictions accumulate monotonically across multiple \texttt{enforce} expressions. Fourth, \emph{scoped principal validation} checks that all \texttt{as} clause references between the current \texttt{enforce} and the next one name principals defined in the active policy, catching mismatches early. The \texttt{as} clause accepts both string literals and variable references for dynamic principal resolution. If the generated policy fails to compile, the same provenance-driven self-healing mechanism used for schema errors re-invokes the causal tool call with the Cedar error and valid schema as feedback.
