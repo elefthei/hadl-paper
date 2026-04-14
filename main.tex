@@ -1,6 +1,33 @@
 \documentclass[acmsmall,screen,review]{acmart}
 \input{lib}
 
+%% Listings setup for HADL code examples
+\usepackage{listings}
+\usepackage{color}
+\lstdefinelanguage{hadl}{
+  keywords={workflow, let, var, tool, agent, user, if, else, while, for, in, type, enforce, eval, as, js},
+  keywordstyle=\bfseries,
+  sensitive=true,
+  comment=[l]{//},
+  morestring=[b]",
+  stringstyle=\itshape,
+}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  xleftmargin=2em,
+  frame=single,
+  framesep=3pt,
+  aboveskip=1em,
+  belowskip=1em,
+  escapeinside={(*@}{@*)},
+}
+
 %% Bibliography style
 \citestyle{acmauthoryear}
 
@@ -43,10 +70,10 @@
 \email{second@example.com}
 }
 
-\keywords{TODO}
+\keywords{domain-specific languages, agentic workflows, gradual typing, authorization, Cedar, LLM agents}
 
 \begin{abstract}
-  TODO: Write abstract.
+  Agentic workflows built with existing orchestration frameworks lack static type checking, express control flow through graph construction rather than imperative constructs, and treat authorization as an external concern. We present HADL, a typed imperative domain-specific language in which human interaction, LLM tool invocation, and LLM reasoning are first-class typed expressions composable with mutable state, unbounded loops, structured iteration, and nested workflow composition. The central mechanism is \emph{gradual generation}, in which LLMs produce not only values but also types, workflows, and authorization policies at runtime. The \texttt{Schema} type is universally compatible during static checking and triggers staged re-typechecking when concrete types materialize at runtime. Arrow types enable LLM-generated workflows to be deserialized and executed via \texttt{eval} with type checking at the call site. The \texttt{Policy} type enables LLM-generated Cedar policies to be activated via an explicit \texttt{enforce} expression, with safety checks that reject deny-all rules and invalid action types, scoped principal validation, and append-only merging that can only tighten access. All three forms share provenance-driven self-healing that re-invokes the causal tool call when validation fails. The language is implemented in Rust with PEG parsing, static type checking, and async tree-walking interpretation.
 \end{abstract}
 
 \maketitle
@@ -55,7 +82,7 @@
 \input{overview}
 \input{design}
 \input{implementation}
-\input{evaluation}
+% \input{evaluation}
 \input{related}
 \input{conclusion}
 
