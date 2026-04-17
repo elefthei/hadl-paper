@@ -6,7 +6,7 @@ This section presents the HADL type system and the gradual generation mechanism 
 \subsection{Syntax}
 \label{sec:design-syntax}
 
-Figure~\ref{fig:syntax} presents the abstract syntax of HADL. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types for workflows, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the three domain-specific primitives (\texttt{user}, \texttt{tool}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{tool} and \texttt{agent} expressions accepts either a string literal or a variable reference for dynamic principal resolution.
+Figure~\ref{fig:syntax} presents the abstract syntax of HADL. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types for workflows, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the four domain-specific primitives (\texttt{ask}, \texttt{say}, \texttt{tool}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{tool} and \texttt{agent} expressions accepts either a string literal or a variable reference for dynamic principal resolution.
 
 \begin{figure}[t]
 \[\begin{array}{rcll}
@@ -15,7 +15,7 @@ P & ::= & \pi^*\; d^* & \textit{program} \\[4pt]
     & \mid & \texttt{@retries}\; n & \textit{retry pragma} \\[4pt]
 d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow declaration} \\
   & \mid & \texttt{type}\; X = T & \textit{type declaration} \\[4pt]
-T & ::= & () \mid \texttt{String} \mid \texttt{Size} \mid \texttt{Bool} & \textit{base types} \\
+T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \textit{base types} \\
   & \mid & \texttt{Schema} & \textit{type of types} \\
   & \mid & \texttt{Policy} & \textit{authorization policy} \\
   & \mid & (T_1 \to T_2) & \textit{arrow type} \\
@@ -28,7 +28,8 @@ e & ::= & s \mid n \mid b & \textit{literals} \\
   & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] & \textit{conditional} \\
   & \mid & \texttt{while}\; (e)\; \{e\} & \textit{loop} \\
   & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \textit{iteration} \\
-  & \mid & \texttt{user}\; s & \textit{human prompt} \\
+  & \mid & \texttt{ask}\; s & \textit{human prompt} \\
+  & \mid & \texttt{say}\; s & \textit{human output} \\
   & \mid & \texttt{tool}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM tool call} \\
   & \mid & \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM agent call} \\
   & \mid & \texttt{js}\; c & \textit{JavaScript expression} \\
@@ -38,11 +39,11 @@ e & ::= & s \mid n \mid b & \textit{literals} \\
   & \mid & e_1 ;\; e_2 & \textit{sequencing} \\[4pt]
 \mathit{op} & ::= & \texttt{==} \mid \texttt{!=} \mid \texttt{<} \mid \texttt{<=} \mid \texttt{>} \mid \texttt{>=} & \textit{comparison operators}
 \end{array}\]
-\caption{Abstract syntax of HADL. Square brackets denote optional components. The notation $(s \mid x)$ in the \texttt{as} clause indicates that the principal can be either a string literal or a variable reference. Overlined parameters $\overline{x_i{:}T_i}$ denote a possibly empty sequence. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string literals, unsigned integer literals, boolean literals, JavaScript code, variable names, workflow names, and type names respectively.}
+\caption{Abstract syntax of HADL. Square brackets denote optional components. The notation $(s \mid x)$ in the \texttt{as} clause indicates that the principal can be either a string literal or a variable reference. Overlined parameters $\overline{x_i{:}T_i}$ denote a possibly empty sequence. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string literals, number literals (signed, possibly fractional), boolean literals, JavaScript code, variable names, workflow names, and type names respectively.}
 \label{fig:syntax}
 \end{figure}
 
-HADL's base types correspond to JavaScript types (\texttt{String}$\to$\texttt{string}, \texttt{Size}$\to$\texttt{number}, \texttt{Bool}$\to$\texttt{boolean}, $()$$\to$\texttt{null}), and all runtime values are represented as JSON. The type checker uses type inference with subsumption. \texttt{tool} and \texttt{js} expressions are treated as oracles that can produce any type, requiring explicit type annotations at binding sites. Three types play a special role in gradual generation: \texttt{Schema} is the \emph{type of types}, arrow types $(T_1 \to T_2)$ are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
+HADL's base types correspond to JavaScript types (\texttt{String}$\to$\texttt{string}, \texttt{Number}$\to$\texttt{number}, \texttt{Bool}$\to$\texttt{boolean}, $()$$\to$\texttt{null}), and all runtime values are represented as JSON. The type checker uses type inference with subsumption. \texttt{tool} and \texttt{js} expressions are treated as oracles that can produce any type, requiring explicit type annotations at binding sites. Three types play a special role in gradual generation: \texttt{Schema} is the \emph{type of types}, arrow types $(T_1 \to T_2)$ are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
 
 \subsection{Gradual Generation}
 \label{sec:design-gradual}
@@ -59,7 +60,7 @@ A \texttt{tool} call annotated with \texttt{Schema} produces a JSON Schema value
 \sigma(\tau) = \begin{cases}
 () & \text{if } \tau = \texttt{null} \\
 \texttt{Bool} & \text{if } \tau = \texttt{boolean} \\
-\texttt{Size} & \text{if } \tau = \texttt{integer} \text{ or } \tau = \texttt{number} \\
+\texttt{Number} & \text{if } \tau = \texttt{integer} \text{ or } \tau = \texttt{number} \\
 \texttt{String} & \text{if } \tau = \texttt{string} \text{ or } \tau = \texttt{enum} \\
 \texttt{Schema} & \text{if } \tau = \texttt{array} \text{ or } \tau = \texttt{object} \text{ or } \tau = \texttt{\$ref}
 \end{cases}
@@ -75,7 +76,7 @@ The staged mechanism provides two guarantees. First, at compile time, all static
 \subsubsection{Gradual Workflow Generation}
 \label{sec:design-gradual-workflows}
 
-A \texttt{tool} call annotated with an arrow type such as \texttt{(String -> Size)} instructs the LLM to produce a complete HADL workflow as structured output. The entire HADL AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program} containing a workflow declaration with typed parameters and a body. The \texttt{eval} expression deserializes this value, validates it, and executes it within the current interpreter context with closure-like semantics. At the type level, if the function type is an arrow $(A \to R)$, arguments are checked against $A$ and the result type is $R$; if the type is \texttt{Schema}, checking is deferred to runtime. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM, and the generated workflow is a full typed program that the type checker can verify at the call site.
+A \texttt{tool} call annotated with an arrow type such as \texttt{(String -> Number)} instructs the LLM to produce a complete HADL workflow as structured output. The entire HADL AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program} containing a workflow declaration with typed parameters and a body. The \texttt{eval} expression deserializes this value, validates it, and executes it within the current interpreter context with closure-like semantics. At the type level, if the function type is an arrow $(A \to R)$, arguments are checked against $A$ and the result type is $R$; if the type is \texttt{Schema}, checking is deferred to runtime. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM, and the generated workflow is a full typed program that the type checker can verify at the call site.
 
 \subsubsection{Gradual Policy Generation}
 \label{sec:design-gradual-policies}
