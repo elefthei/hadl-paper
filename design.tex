@@ -19,6 +19,7 @@ T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \tex
   & \mid & \texttt{Schema} & \textit{type of types} \\
   & \mid & \texttt{Policy} & \textit{authorization policy} \\
   & \mid & (T_1 \to T_2) & \textit{arrow type} \\
+  & \mid & \texttt{array[}T\texttt{]} & \textit{array type} \\
   & \mid & \{ \overline{x_i{:}T_i} \} & \textit{record type} \\
   & \mid & X & \textit{named type reference} \\[4pt]
 e & ::= & s \mid n \mid b & \textit{literals} \\
