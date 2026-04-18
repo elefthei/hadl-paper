@@ -1,94 +1,75 @@
 \section{Overview}
 \label{sec:overview}
 
-We introduce HADL through three self-contained examples, each demonstrating one form of gradual generation: type generation, workflow generation, and policy generation. Together, the three examples cover HADL's main contributions before the formal treatment in Sections~\ref{sec:design} and~\ref{sec:implementation}.
+We introduce HADL through two self-contained workflows. The first covers types and policies, showing how values, types, and authorization rules produced by the LLM are validated under the same type discipline and authorization semantics that govern the rest of the program. The second covers workflow generation, showing how a \texttt{tool} call can produce a complete HADL workflow that executes as part of the workflow that produced it. Together, the two workflows cover HADL's main contributions before the formal treatment in Sections~\ref{sec:design} and~\ref{sec:implementation}.
 
-HADL programs consist of workflow declarations, which are typed functions that compose four domain-specific primitives with standard imperative constructs. The primitive \texttt{ask} prompts a human operator and returns a \texttt{String}. The primitive \texttt{say} prints a string to the output stream and returns unit. The primitive \texttt{tool} sends a description to an LLM tool session configured to return structured data and requires an explicit type annotation at the binding site. The primitive \texttt{agent} sends an instruction to an LLM reasoning session and returns a \texttt{String}. These four primitives are first-class expressions in the language, not callbacks or graph nodes, so they compose naturally with \texttt{let} and \texttt{var} bindings, \texttt{if}/\texttt{else} branches, \texttt{while} loops, \texttt{for} iteration, and inline JavaScript expressions via the \texttt{js} keyword. The type checker runs a two-pass analysis before execution begins, rejecting \texttt{tool} calls without type annotations, assignments to immutable variables, and return type mismatches, all with diagnostic source spans.
+HADL programs consist of workflow declarations, which are typed functions that compose four domain-specific primitives with standard imperative constructs. The primitive \texttt{ask} prompts a human operator and returns a \texttt{String}. The primitive \texttt{say} prints a string to the output stream and returns unit. The primitive \texttt{tool} sends a description to an LLM tool session configured to return structured data and requires an explicit type annotation at the binding site. The primitive \texttt{agent} sends an instruction to an LLM reasoning session and returns a \texttt{String}. These four primitives are first-class expressions in the language, not callbacks or graph nodes, so they compose naturally with \texttt{let} and \texttt{var} bindings, \texttt{if}/\texttt{else} branches, \texttt{while} loops, \texttt{for} iteration, and inline JavaScript expressions via the \texttt{js} keyword. The type checker runs before execution begins, rejecting \texttt{tool} calls without type annotations, assignments to immutable variables, and return type mismatches, all with diagnostic source spans.
 
-\subsection{Gradual Type Generation}
-\label{sec:overview-schema}
+\subsection{Gradual Validation for Types and Policies}
+\label{sec:overview-types-policies}
 
-Many agentic workflows involve LLM calls that produce not only values but also the structure that governs subsequent data. A tool call might generate a schema describing a booking form, and subsequent calls must produce values conforming to that schema. This structure cannot be known at compile time because it is determined by the LLM at runtime. HADL addresses this through gradual type generation in which the \texttt{Schema} type serves as the type of types, compatible with all static types at compile time and resolved to a concrete type at runtime.
+Many agentic workflows need to handle two kinds of runtime information at once. The shape of the data flowing between \texttt{tool} calls is not known until the LLM produces it, and the authorization rules that govern those calls are often specific to the operator, the task, or the stage of the workflow. HADL handles both with the same type discipline. The \texttt{Schema} type is compatible with every static type and resolves to a concrete type once the LLM delivers one, after which the rest of the program is checked under the same type system. The \texttt{Policy} type binds an LLM-generated Cedar policy as a value, and an explicit \texttt{enforce} expression activates it, after which every subsequent \texttt{tool} or \texttt{agent} invocation is checked against a principal supplied at the call site.
 
-Figure~\ref{fig:overview-schema} shows a hotel booking workflow that also illustrates the core language primitives. The \texttt{@retries 3} pragma on line~1 activates the self-healing mechanism, described below. Line~4 uses \texttt{ask} to prompt the human operator, binding the result to \texttt{request}. Line~5 binds \texttt{form\_schema} with a \texttt{Schema} annotation, signalling to the type checker that this variable will hold a runtime-generated type. When line~5 executes at runtime, the interpreter parses the LLM's response as a JSON Schema value, converts it to a concrete HADL type, registers it in the environment, and re-invokes the type checker over the remaining program before continuing. Line~7 uses \texttt{form\_schema} in type annotation position, so the return value of the second \texttt{tool} call is checked against the concrete type materialized from the generated schema. The backtick expressions on line~9, such as \texttt{`booking.name`}, access fields on the bound JSON value through the embedded JavaScript engine at string construction time. The same engine supports mutable state via \texttt{var} bindings with inline arithmetic (\texttt{js} expressions) and backtick interpolation within string literals, enabling workflows to accumulate and transform data across multiple tool calls.
+Figure~\ref{fig:clinical-trial} shows a clinical trial workflow. The \texttt{@retries 3} pragma on line~1 activates self-healing, described below. Line~4 prompts the operator for a trial description. Line~5 binds \texttt{crf} with a \texttt{Schema} annotation, signalling to the type checker that this variable will hold a type produced at runtime. When line~5 executes, the interpreter parses the LLM's response as a JSON Schema value, converts it to a concrete HADL type, and checks the remainder of the program against that concrete type under the same type discipline that governs the rest of the language. Line~6 produces a blinding policy and line~8 activates it with \texttt{enforce}. After line~8, every \texttt{tool} and \texttt{agent} invocation constructs an authorization triplet with its declared principal and is checked against the installed policy before any LLM call is made. Line~10 asks the LLM for a list of patient identifiers, bound as \texttt{Schema} since the array structure is determined at runtime. The \texttt{for} loop on lines~12--16 iterates that list. Line~13 binds \texttt{visit} with type \texttt{crf}, so the output is validated against the concrete schema produced on line~5, and the field access \texttt{visit.patient\_id} on line~15 is checked under the same type system. The \texttt{tool} call inside the loop carries the \texttt{as role} clause, so each invocation is authorized for the principal the operator declared on line~9, and line~14 counts each successful visit in the mutable \texttt{total} via an inline \texttt{js} expression. If a serious adverse event is reported, lines~20--21 produce and activate a second policy. The two policies are merged append-only, so access rules only tighten. Line~22 can only run when the principal is \texttt{safety\_board}, because the merged policy blocks every other role from adverse event reports.
 
-\begin{figure}[t]
-\begin{lstlisting}[language=hadl,showstringspaces=false]
-@retries 3
+The \texttt{@retries} pragma activates self-healing. When validation rejects an LLM output, the runtime identifies the \texttt{tool} call that produced the rejected value, re-invokes it with the violated constraint appended to the original prompt, and re-runs the check under the same type and authorization discipline. The loop runs up to the declared retry limit. If the retry limit is exhausted, the interpreter raises the underlying error with the full diagnostic.
 
-workflow book_hotel() -> String {
-  let request = ask "What kind of hotel are you looking for?"
-  let form_schema: Schema = tool "Generate a booking form
-    schema for `request`"
-  let booking: form_schema = tool "Fill the booking form
-    for `request`"
-  say "Name `booking.name`, room `booking.room_type`"
-}
-\end{lstlisting}
-\caption{A hotel booking workflow illustrating gradual type generation and self-healing. The \texttt{Schema} annotation on line~5 marks \texttt{form\_schema} as a runtime-generated type. When line~5 returns, execution pauses, the JSON Schema value is converted to a concrete type, and the type checker re-runs over lines~7--8 before execution resumes. If the re-check fails, the \texttt{@retries 3} pragma activates the self-healing loop, which re-invokes the causal tool call with the type error as feedback.}
-\label{fig:overview-schema}
-\end{figure}
-
-The \texttt{@retries} pragma activates self-healing. When the staged re-typecheck fails, provenance tracking identifies the causal tool call and re-invokes it with the type error appended to the original prompt. The loop runs up to the declared retry limit; if exhausted, the interpreter raises a schema type error with the full diagnostic.
-
-\subsection{Gradual Workflow Generation}
+\subsection{Gradual Validation for Workflow Generation}
 \label{sec:overview-workflow}
 
-HADL workflows are first-class values with arrow types. When a \texttt{tool} call is annotated with an arrow type, the LLM produces a complete HADL workflow as a JSON-serialized AST, and the \texttt{eval} expression deserializes and executes it within the current interpreter context. This enables hierarchical plan generation, where an outer workflow delegates sub-task planning to the LLM.
+Agentic workflows often delegate subtasks whose structure is itself the subject of the current reasoning step. A scoring function, a triage procedure, or a data cleaning pipeline may all be worth producing on the fly, shaped by what the operator has just said. HADL handles this by making workflows first-class values with arrow types. When a \texttt{tool} call is annotated with an arrow type, the LLM produces a complete HADL workflow as a JSON-serialized AST, and the \texttt{eval} expression deserializes and invokes it in the calling workflow's environment. The generated workflow is not a separate program. It runs as part of the workflow that produced it, sharing the caller's variable scope, and every \texttt{eval} site is checked against the arrow's parameter and return types.
 
-Figure~\ref{fig:overview-workflow} shows a car recommendation workflow. Line~3 asks the LLM to generate a scoring workflow with the arrow type \texttt{(String -> Number)}, meaning it takes a car description and returns a numeric score. The LLM produces a JSON-serialized HADL program containing a workflow declaration with a \texttt{String} parameter and a \texttt{Number} return type. Line~5 asks the LLM for a list of cars, bound as \texttt{Schema} since the array structure is determined at runtime. The \texttt{for} loop on line~7 iterates over the cars and applies the generated scoring workflow to each one via \texttt{eval scorer(car)} on line~8. The generated workflow executes in the current interpreter context with access to all in-scope variables, and the type checker verifies at the \texttt{eval} call site that the argument type matches the arrow's parameter type.
+Figure~\ref{fig:overview-workflow} shows a car recommendation workflow and the workflow it produces. Line~3 of the outer workflow generates a \texttt{Schema} describing a single car. Line~4 asks the LLM to generate a scorer with the arrow type \texttt{(car\_schema -> Number)}, an arrow whose parameter type is the runtime-generated \texttt{car\_schema} itself. The LLM produces the workflow shown below the arrow, taking a car conforming to the schema and returning a numeric score. The \texttt{while} loop on lines~9--18 fills the schema three times, binding a fresh \texttt{car} value with type \texttt{car\_schema} on each iteration so that every LLM output is validated against the concrete shape produced on line~3. Line~11 applies the generated scorer via \texttt{eval scorer(car)}. At the \texttt{eval} expression the type checker verifies that the argument type matches the arrow's parameter type and that the result is used where the return type is accepted. Line~14 extracts the car's name via an inline \texttt{js} expression when a new best score is found. The arrow between the two listings indicates that the generated workflow is produced by the \texttt{tool} call on line~4 of the outer workflow and runs in the same interpreter context. The generated workflow itself calls \texttt{tool} three times to rate comfort, cost, and reliability, and uses an inline \texttt{js} expression to average the three ratings.
 
-\begin{figure}[t]
+\begin{figure}[H]
+\centering
+\begin{subfigure}{\linewidth}
 \begin{lstlisting}[language=hadl,showstringspaces=false]
 workflow pick_car() -> String {
-  let prefs = ask "What matters most in a car?"
-  let scorer: (String -> Number) = tool "Create a HADL
-    workflow that scores cars based on: `prefs`"
-  let cars: Schema = tool "List 3 popular cars as
-    short descriptions"
-  for car in cars {
+  let prefs = ask "What matters most?"
+  let car_schema: Schema = tool "Schema for a car with name and type"
+  let scorer: (car_schema -> Number) = tool "Workflow that
+    scores a car on `prefs`"
+  var best: String = ""
+  var top: Number = 0
+  var i: Number = 0
+  while (i < 3) {
+    let car: car_schema = tool "Fill the schema with a popular car"
     let score: Number = eval scorer(car)
-    say "  `car` - Score: `score`/10"
+    if (score > top) {
+      top = score
+      best = js car.name
+    }
+    say "`car.name` rated `score`"
+    i = js i + 1
   }
-  tool "Based on the scores, recommend the best car"
+  say "Recommended `best`"
+  best
 }
 \end{lstlisting}
-\caption{A car recommendation workflow illustrating gradual workflow generation. The \texttt{tool} call on line~3 produces a complete HADL workflow as a JSON-serialized AST with the arrow type \texttt{(String -> Number)}. The \texttt{eval} expression on line~8 deserializes and executes the generated workflow for each car, with the type checker verifying the argument and return types at the call site.}
+\subcaption{Outer workflow.}
+\end{subfigure}
+
+\vspace{0.4em}
+\begin{tikzpicture}[>=Stealth]
+  \draw[->, very thick] (0,0.3) -- (0,-0.3);
+  \node[right, font=\footnotesize] at (0.15,0)
+    {generated at runtime, runs in the outer workflow's scope};
+\end{tikzpicture}
+\vspace{0.4em}
+
+\begin{subfigure}{\linewidth}
+\begin{lstlisting}[language=hadl,showstringspaces=false]
+// produced by the tool call on line 4 above
+workflow score(car: car_schema) -> Number {
+  let comfort: Number = tool "Rate comfort of `car.name`"
+  let cost: Number = tool "Rate cost of `car.name`"
+  let reliability: Number = tool "Rate reliability of `car.name`"
+  js (comfort + cost + reliability) / 3
+}
+\end{lstlisting}
+\subcaption{Generated workflow.}
+\end{subfigure}
+\caption{A car recommendation workflow illustrating gradual validation for workflow generation. Line~3 of the outer workflow generates a schema for a single car. Line~4 asks the LLM for a scorer with arrow type \texttt{(car\_schema -> Number)}, the parameter being the runtime-generated type itself. The LLM produces the workflow shown below, taking a car that conforms to the schema and returning a numeric score. The \texttt{while} loop fills the schema three times, and \texttt{eval scorer(car)} on line~11 invokes the generated workflow for each fresh car, evaluating it in the outer workflow's variable scope. At every \texttt{eval} site, the type checker verifies that the argument matches the arrow's parameter type and that the result is used where the return type is accepted. The generated workflow itself calls \texttt{tool} three times and averages the results with an inline \texttt{js} expression, showing that a generated workflow has full access to HADL's primitives and JavaScript interop.}
 \label{fig:overview-workflow}
 \end{figure}
-
-\subsection{Gradual Policy Generation}
-\label{sec:overview-policy}
-
-HADL embeds authorization directly in the language's evaluation semantics. Before every \texttt{tool} and \texttt{agent} invocation, the interpreter constructs an authorization triplet of the form (principal, action, resource), validates it against a Cedar policy store, and halts on a deny decision before the LLM call is made. Policies can be loaded statically via the \texttt{@policy} pragma, but they can also be generated gradually at runtime by annotating a \texttt{tool} call with the \texttt{Policy} type. Crucially, policy generation and policy activation are separate operations. A \texttt{Policy}-annotated binding stores the generated policy as a value without activating it. The \texttt{enforce} expression explicitly activates the policy, installing it in the runtime and enabling human-in-the-loop approval before enforcement begins.
-
-Figure~\ref{fig:overview-policy} shows a task-scoped data query workflow with human-in-the-loop policy approval. Line~4 prompts the user for their role, binding the result to a variable. Line~5 instructs the LLM to generate a Cedar policy scoped to that role, annotated with \texttt{Policy}. The generated policy is stored but \emph{not yet active}. Line~8 shows the policy to the user for approval and binds their \texttt{String} response. Lines~10--11 activate the policy only after the response matches \texttt{"yes"}, via the \texttt{enforce} expression inside a conditional branch. After activation, the runtime performs two safety checks before installation. It rejects any blanket deny-all rule that would block all operations, and it validates that all action types in the policy are recognized. Once installed, line~13 succeeds because the generated policy permits reading public data. Line~16 is blocked before the LLM is invoked because the generated policy forbids salary access for the analyst role. The \texttt{as} clause uses the variable \texttt{role} rather than a string literal, enabling dynamic principal resolution where the principal identity is determined at runtime from user input.
-
-\begin{figure}[t]
-\begin{lstlisting}[language=hadl,showstringspaces=false]
-@retries 3
-
-workflow secure_data_query() -> String {
-  let role = ask "What is your role? (analyst / admin)"
-  let restrictions: Policy = tool "Generate a Cedar
-    policy for role `role`. Permit reads, forbid
-    salary access for analyst."
-  let approved = ask "Policy: `restrictions`.
-    Approve? (yes/no)"
-  if (approved == "yes") {
-    enforce restrictions
-  }
-  let public: String = tool "Query public website
-    statistics" as role
-  say "Public stats: `public`"
-  let sensitive: String = tool "Query employee salary
-    database" as role
-  say "Sensitive: `sensitive`"
-  "done"
-}
-\end{lstlisting}
-\caption{A task-scoped data query workflow illustrating gradual policy generation with human-in-the-loop approval. The \texttt{Policy} annotation on line~5 generates a Cedar policy, stored but not yet active. Line~8 shows the policy to the user. The \texttt{enforce} expression on line~11 activates the policy only after explicit approval. The \texttt{as role} clause on lines~14 and~17 resolves the principal dynamically from the \texttt{role} variable. After activation, the runtime validates that all \texttt{as} clause principals are defined in the policy. Line~13 succeeds; line~16 is blocked by the forbid rule.}
-\label{fig:overview-policy}
-\end{figure}
-
-Generated policies are merged append-only with existing rules, so restrictions accumulate monotonically across multiple \texttt{enforce} expressions. If the generated policy fails to compile, the self-healing mechanism re-invokes the causal tool call with the Cedar error as feedback, enabled by the \texttt{@retries} pragma on line~1. Section~\ref{sec:design-gradual-policies} details the safety invariants enforced during installation.
