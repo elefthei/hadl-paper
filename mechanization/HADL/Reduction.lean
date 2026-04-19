@@ -119,6 +119,45 @@ inductive Step (O : Oracle) : Config → Config → Prop where
         ⟨ρ, ec, P, π, .enforce x⟩
         ⟨ρ, ec, P', π, .unit⟩
 
+  -- L1/L2: Ask / Say. Ask queries the oracle for a string answer;
+  -- Say is a pure output with no model-level side effect.
+  | askStep {ρ ec P π s v}
+      (horacle : O s ec .tString v)
+      (hrt     : RtType ρ v .tString) :
+      Step O
+        ⟨ρ, ec, P, π, .ask s⟩
+        ⟨ρ, [], P, π, .valE v⟩
+
+  | sayStep {ρ ec P π s} :
+      Step O
+        ⟨ρ, ec, P, π, .say s⟩
+        ⟨ρ, ec, P, π, .unit⟩
+
+  -- L2: Agent family. Agent-Success mirrors Gen-Success but inlines the
+  -- returned value rather than binding it, flushing the err-context.
+  | agentSuccess {ρ ec P π τ s pr v}
+      (hauth   : policyAllows P π .agent)
+      (horacle : O s ec τ v)
+      (hrt     : RtType ρ v τ) :
+      Step O
+        ⟨ρ, ec, P, π, .agent τ s pr⟩
+        ⟨ρ, [], P, π, .valE v⟩
+
+  | agentHealType {ρ ec P π τ s pr v}
+      (horacle : O s ec τ v)
+      (hbad    : ¬ RtType ρ v τ)
+      (hbudget : (ec ++ [explainType v τ]).length ≤ retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .agent τ s pr⟩
+        ⟨ρ, ec ++ [explainType v τ], P, π, .agent τ s pr⟩
+
+  | agentHealPol {ρ ec P π τ s pr}
+      (hdeny   : ¬ policyAllows P π .agent)
+      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .agent τ s pr⟩
+        ⟨ρ, ec ++ [explainPolicy π P], P, π, .agent τ s pr⟩
+
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C
   | step {C C' C''} : Step O C C' → Steps O C' C'' → Steps O C C''

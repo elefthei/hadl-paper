@@ -104,6 +104,16 @@ theorem T1_WF_preservation
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
   | enforceInstall _ _ _ _ =>
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | askStep _ _ =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
+  | sayStep =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | agentSuccess _ _ _ =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
+  | agentHealType _ _ hbudget =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+  | agentHealPol _ hbudget =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
 
 /--
   **T2 — Staged Materialization Soundness.** Direct read-off of the
