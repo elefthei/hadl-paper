@@ -42,7 +42,7 @@ The formal model uses four judgments that interlock runtime values, static types
 
 \paragraph{Runtime typing} $\RtType{\MEnv}{v}{\tau}$ holds when value $v$ has type $\tau$ under environment $\MEnv$. When $\tau$ is a variable name bound in $\MEnv$ to a schema value $\Tschema(\tau')$, the judgment resolves through $\MEnv$ and checks $\RtType{\MEnv}{v}{\tau'}$. Record and array cases recurse structurally.
 
-\paragraph{Residual static typing} $\StType{\Projenv{\MEnv}}{e}{\tau}$ holds when expression $e$ has type $\tau$ under the \emph{projected} static context $\Projenv{\MEnv} = \{x{:}\tau \mid \MEnv(x) = (\_,\tau,\_,\_)\}$. This is the ordinary static type system of \hadl applied to the residual program after reduction has extended the environment. It is invoked at compile time on the initial program and re-invoked at runtime after every materialization.
+\paragraph{Residual static typing} $\StType{\Projenv{\MEnv}}{e}{\tau}$ holds when expression $e$ has type $\tau$ under the \emph{projected} static context $\Projenv{\MEnv} = \{x{:}\tau \mid \MEnv(x) = (\_,\tau,\_,\_)\}$. This is the ordinary static type system of \hadl applied to the residual program after reduction has extended the environment. It is invoked at compile time on the initial program and re-invoked at runtime after every materialization.\footnote{The mechanization treats $\StType{\cdot}{\cdot}{\cdot}$ as a black-box oracle (only its reflexivity on reduced values and on $\Tschema$-annotated expressions is used). Because $\rulename{Gen-Success}$ re-invokes it as a side condition, (T1) is unaffected.}
 
 \paragraph{Policy authorization} $\PolOk{\MPol}{\MPrin}{a}$ holds when Cedar policy $\MPol$ permits action $a \in \{\texttt{gen},\texttt{agent},\texttt{eval}\}$ for principal $\MPrin$ against the current resource. It is the Cedar decision procedure lifted into our judgment language.
 
@@ -57,7 +57,7 @@ The formal model uses four judgments that interlock runtime values, static types
 \subsection{Reduction}
 \label{sec:sem-reduction}
 
-The reduction relation $C \step C'$ decomposes into three alternating layers. \figr{fig:rules-core} gives a selection of core and generative rules; the remaining rules appear in the appendix.
+The reduction relation $C \step C'$ decomposes into three alternating layers. \figr{fig:rules-core} gives a selection of core and generative rules; the remaining rules appear in the appendix. Throughout this figure and the appendix, we use evaluation contexts $E$ for presentation; the mechanized reduction relation is the top-level fragment (all $E=[\cdot]$), with the $E[\cdot]$ cases obtained by the standard congruence closure and elided in Lean for brevity.
 
 \begin{figure*}[t]
 \small
@@ -119,40 +119,36 @@ Classical progress and preservation do not apply directly because \hadl types ar
 
 \begin{definition}[Eventually-truthful oracle]
 \label{def:oracle-truthful}
-An oracle $\mathcal{O}$ is \emph{eventually-truthful at budget $\MRetry$} for a configuration $C_0$ if, for every $\Gen{\tau}{s}$ expression encountered during any reduction trace from $C_0$, there exists $k \le \MRetry$ such that the $k$-th response of $\mathcal{O}$ along that trace satisfies both $\RtType{\MEnv_k}{v_k}{\tau}$ and $\PolOk{\MPol_k}{\MPrin_k}{\texttt{gen}}$.
+An oracle $\mathcal{O}$ is \emph{eventually-truthful at budget $\MRetry$} if, for every gen site $\Gen{\tau}{s}$, every environment $\MEnv$, every policy $\MPol$, and every principal $\MPrin$ such that $\PolOk{\MPol}{\MPrin}{\texttt{gen}}$, there exists a heal context $\epsilon$ with $|\epsilon| \le \MRetry$ and a value $v$ satisfying both $\Oracle{s}{\epsilon}{\tau} \ni v$ and $\RtType{\MEnv}{v}{\tau}$.
 \end{definition}
+
+This point-wise phrasing matches the form used in the mechanization: it quantifies once over each \emph{call site}, not over traces. The trace-level reading (at each gen encountered, some $k\le N$ oracle response discharges the side conditions) follows by instantiating $(\MEnv,\MPol,\MPrin)$ with the configuration reached when that gen is about to fire.
 
 \begin{theorem}[\hadl soundness]
 \label{thm:hadl-sound}
-Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact, covering every rule in \S\ref{sec:semantics} and Appendix~\ref{app:rules}. Clause (T4) is mechanized as two gen-local fragments (budget progress and truthful-oracle gen-success); the full trace-level statement, which requires an $E[\cdot]$ congruence extension and a pure-core termination hypothesis, is argued only on paper.}
+Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3), (T4a), and (T4b) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact, sorry-free, covering every rule in \S\ref{sec:semantics} and Appendix~\ref{app:rules}. Clause (T4c) is argued only on paper; the mechanization of the full trace-level claim requires an $E[\cdot]$ congruence extension of the reduction relation and a pure-core termination hypothesis and is left to future work.}
 \begin{enumerate}
   \item \textbf{\textsc{(T1) WF-Preservation.}} For every $n$ with $C_n$ not a terminal error, $\WF{C_n}$.
   \item \textbf{\textsc{(T2) Staged Materialization Soundness.}} Whenever $C_n \step C_{n+1}$ is an application of $\rulename{Gen-Success}$, the residual $e_{n+1}$ type-checks against $\Projenv{\MEnv_{n+1}}$; every subsequent $\Gen{\tau'}{s'}$ with an annotation referring to a name newly bound at step $n{+}1$ is checked against the materialized concrete type.
   \item \textbf{\textsc{(T3) Policy Monotonicity.}} For $m \le n$, $\Allow{\MPol_n} \subseteq \Allow{\MPol_m}$; and every $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, or $\rulename{Eval-Success}$ step between $m$ and $n$ satisfied the policy-authorization side condition under $\MPol_k$ and $\MPrin_k$ at its point of application.
-  \item \textbf{\textsc{(T4) Oracle-Relative Safety.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ for $C_0$, then $C_0 \steps C_\text{final}$ with $e_\text{final}$ a value. Otherwise, the trace terminates in a terminal error configuration $\mathsf{err}(\MErr,\Prov(\Gen{\tau}{s}))$ whose provenance label identifies the specific $\Gen{\tau}{s}$ call that exhausted its budget.
+  \item \textbf{\textsc{(T4a) Budget Progress.}} If at some $C_n$ the redex is a bare $\Gen{\tau}{s}$ and $|\MErr_n| > \MRetry$, then $\rulename{Gen-Budget-Exhausted}$ fires at step $n$ and yields a terminal error configuration carrying $\MErr_n$ and the gen's provenance label.
+  \item \textbf{\textsc{(T4b) Truthful Gen-Success.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ (\defn{def:oracle-truthful}) and at $C_n$ the redex is a bare $\Gen{\tau}{s}$ with $\PolOk{\MPol_n}{\MPrin_n}{\texttt{gen}}$, then there exist $\epsilon$ with $|\epsilon|\le\MRetry$ and $v$ with $\RtType{\MEnv_n}{v}{\tau}$ such that $\rulename{Gen-Success}$ fires from $C_n[\MErr_n := \epsilon]$ and flushes the heal context to $\emptyset$.
+  \item \textbf{\textsc{(T4c) Oracle-Relative Termination.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ and all pure loops in $e_0$ terminate, then $C_0 \steps C_\text{final}$ with $e_\text{final}$ a value. If at some gen site $\mathcal{O}$ is not eventually-truthful, the trace terminates in a terminal error configuration $\mathsf{err}(\MErr,\Prov(\Gen{\tau}{s}))$ whose provenance label identifies the specific $\Gen{\tau}{s}$ call that exhausted its budget.
 \end{enumerate}
 \end{theorem}
 
 \begin{proof}[Proof sketch]
-By induction on the length of the reduction trace, with case analysis per rule.
-
-\emph{(T1).} Pure-core rules preserve well-formedness by the standard argument: the residual projection $\Projenv{\MEnv}$ is unchanged by $\rulename{Var}$, extended by $\rulename{Let-Bind}$ with a binding satisfying $\RtType{\MEnv}{v}{\tau}$ by hypothesis on the evaluation of the right-hand side, and left invariant by $\rulename{Assign}$ to a mutable variable of the same type. $\rulename{Gen-Success}$ fires only when the runtime-type check and the residual re-type-check both hold, so the resulting configuration satisfies both conditions in the definition of $\WF{\cdot}$. Heal rules do not extend $\MEnv$, preserve $\MPol$, and extend $\MErr$ by one element whose length bound is enforced as a side condition. $\rulename{Enforce-Install}$ updates $\MPol$ monotonically; no binding in $\MEnv$ changes type. Provenance acyclicity is preserved because new provenance labels always refer to already-reduced expressions.
-
-\emph{(T2).} The re-type-check side condition on $\rulename{Gen-Success}$ is exactly the antecedent of (T2). Subsequent occurrences of the newly bound name in the residual resolve through $\MEnv$ to the materialized concrete type by construction of $\RtType{\cdot}{\cdot}{\cdot}$.
-
-\emph{(T3).} $\rulename{Enforce-Install}$ has $\Allow{\MPol'} \subseteq \Allow{\MPol}$ as a side condition; all other rules leave $\MPol$ unchanged. The authorization claim follows because $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, and $\rulename{Eval-Success}$ each have $\PolOk{\MPol_k}{\MPrin_k}{a}$ as a side condition at their point of application.
-
-\emph{(T4).} Under eventually-truthful $\mathcal{O}$, every $\Gen{\tau}{s}$ encountered during reduction has some $k \le \MRetry$ at which both the runtime-type check and the policy pre-check succeed. Before that step, at most $k-1$ applications of $\rulename{Gen-Heal-Type}$ or $\rulename{Gen-Heal-Pol}$ occur, each adding one element to $\MErr$. At step $k$, $\rulename{Gen-Success}$ fires and $\MErr$ is flushed. Since reductions between gens are finite (structural induction on expressions plus termination of pure loops under the usual hypothesis), the trace reaches a value. When $\mathcal{O}$ is \emph{not} eventually-truthful at some gen site, $|\MErr|$ reaches $\MRetry$ and $\rulename{Gen-Budget-Exhausted}$ deterministically fires, producing a terminal error configuration whose provenance label is the causal $\Gen{\tau}{s}$.
+By induction on the length of the reduction trace. (T1), (T3), (T4a), (T4b) are proved per-rule, mirroring the Lean mechanization; (T2) is a direct rereading of the $\rulename{Gen-Success}$ side condition; (T4c) combines eventually-truthful gen-success (T4b) with a well-founded measure on intermediate heal steps. Full proofs appear in Appendix~\ref{app:proofs}.
 \end{proof}
 
 The following corollaries specialize the theorem to two properties often stated independently in the literature.
 
 \begin{corollary}[Bounded-retry termination]
 \label{cor:bounded-retry}
-Every reduction trace from a well-formed $C_0$ reaches either a value configuration or a terminal error configuration in finitely many steps, assuming termination of all pure loops in $e_0$.
+Assume (i) $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ at every gen site encountered in the trace, and (ii) all pure loops in $e_0$ terminate. Then every reduction trace from a well-formed $C_0$ reaches either a value configuration or a terminal error configuration in finitely many steps. Without (i), the trace may still terminate in a terminal error by (T4a); without (ii), termination for $\rulename{Js}$-dominated fragments is delegated to the JavaScript host and not guaranteed by \hadl alone.
 \end{corollary}
 
 \begin{corollary}[Blame faithfulness]
 \label{cor:blame}
-If a trace ends in a terminal error configuration $\mathsf{err}(\MErr,\ell)$, then $\ell$ is the source label of the specific $\Gen{\tau}{s}$ call whose budget was exhausted, and $\MErr$ records the sequence of diagnostic feedback for that call.
+Assume the source program $e_0$ contains no occurrence of the internal $\mathsf{errTerm}(\cdot,\cdot)$ construct (i.e., only surface syntax of \figr{fig:syntax}). If a trace ends in a terminal error configuration $\mathsf{err}(\MErr,\ell)$, then $\ell$ is the source label of the specific $\Gen{\tau}{s}$ call whose budget was exhausted, and $\MErr$ records the sequence of diagnostic feedback for that call.
 \end{corollary}

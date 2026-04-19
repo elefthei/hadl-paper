@@ -98,22 +98,50 @@ Heal rules for $\Agent{s}$ and $\Eval{f}{\overline{v_i}}$ mirror $\rulename{Gen-
 In $\rulename{Enforce-Heal}$, $s_x$ denotes the prompt recorded in the provenance of the binding for $x$. The rule rewinds to the causal gen so the oracle can retry with the Cedar compilation or monotonicity error as feedback.
 
 \section{Proof of Theorem~\ref{thm:hadl-sound}}
-\label{app:proof}
+\label{app:proofs}
 
-The body sketches the argument; here we expand case analysis for the subtler cases.
+We expand the argument clause by clause. Each induction is on the derivation of $C_n \step C_{n+1}$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization relies on three axioms: \texttt{jsEval} (the JavaScript host evaluates pure expressions), \texttt{policyInstall\_shrinks} (Cedar's \texttt{forbid}-over-\texttt{permit} semantics implies appended rules shrink $\Allow{\cdot}$), and \texttt{freshLabel\_is\_fresh} (the opaque label generator returns names absent from the current environment); all other steps are sorry-free.
 
-\paragraph{\textsc{(T1) Case $\rulename{Gen-Success}$.}} Assume $\WF{C_n}$. We must show $\WF{C_{n+1}}$. Four side conditions of the rule discharge the four clauses of well-formedness:
+\subsection{(T1) WF-Preservation}
+
+\paragraph{Case $\rulename{Gen-Success}$.} Assume $\WF{C_n}$. We must show $\WF{C_{n+1}}$. Four side conditions of the rule discharge the four clauses of well-formedness:
 \begin{itemize}
   \item $\RtType{\MEnv_n}{v}{\tau}$ establishes clause (1) for the new binding.
   \item $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ is exactly clause (2).
-  \item The provenance label $\ell$ for the new binding is fresh (it is the source span of the $\Gen{\tau}{s}$ call) and cannot create a cycle, establishing clause (3).
+  \item The provenance label $\ell$ for the new binding is fresh (axiom \texttt{freshLabel\_is\_fresh}) and cannot create a cycle, establishing clause (3).
   \item $\MErr_{n+1} = \emptyset$, trivially within budget, establishing clause (4).
 \end{itemize}
 
-\paragraph{\textsc{(T1) Case $\rulename{Gen-Heal-Type}$.}} Assume $\WF{C_n}$. $\MEnv$ and $\MPol$ are unchanged, so clauses (1)--(3) carry over. Clause (4) follows from the rule's side condition $|\MErr \cdot \epsilon| \le \MRetry$.
+\paragraph{Case $\rulename{Gen-Heal-Type}$, $\rulename{Gen-Heal-Pol}$, $\rulename{Agent-Heal-*}$, $\rulename{Eval-Heal-*}$, $\rulename{Enforce-Heal}$.} $\MEnv$ is unchanged, so clauses (1)--(3) carry over; clause (4) follows from the rule's own $|\MErr \cdot \epsilon| \le \MRetry$ side condition.
 
-\paragraph{\textsc{(T2).}} The side condition $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ on $\rulename{Gen-Success}$ re-checks the entire residual expression against the extended static context. If the newly bound name $x_\ell$ appears in any subsequent type annotation position, $\Projenv{\MEnv_{n+1}}$ maps $x_\ell$ to the materialized type $\tau$. The $\StType{\cdot}{\cdot}{\cdot}$ judgment resolves name references through this map, so any downstream $\Let{y}{x_\ell}{\Gen{x_\ell}{s'}}$ is checked against the concrete $\tau$ rather than against $\Tschema$.
+\paragraph{Case $\rulename{Gen-Budget-Exhausted}$.} The target configuration has expression $\mathsf{errTerm}(\MErr,\ell)$ and is a terminal-error state; by the statement of (T1) we need not prove $\WF{\cdot}$ for terminal errors.
 
-\paragraph{\textsc{(T3).}} $\MPol$ is updated only by $\rulename{Enforce-Install}$, whose side condition enforces $\Allow{\MPol'} \subseteq \Allow{\MPol}$. Monotonicity across the whole trace follows by transitivity. The authorization claim is immediate because each of $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, and $\rulename{Eval-Success}$ has $\PolOk{\MPol}{\MPrin}{a}$ as a side condition.
+\paragraph{Case $\rulename{Let-Bind}$ (and $\rulename{Var-Bind}$).} The new binding $\MBind{x}{v}{\tau}{\ell}{\_}$ is well-typed by hypothesis on the evaluation of the right-hand side (from which the rule is only applicable); the residual expression after substitution type-checks because the surrounding let was well-typed at $\tau$.
 
-\paragraph{\textsc{(T4).}} We argue termination. Between two successive applications of a generative rule ($\rulename{Gen-Success}$, $\rulename{Agent-Success}$, $\rulename{Eval-Success}$), only pure-core rules fire. Pure-core reduction terminates on any expression whose \texttt{while} and \texttt{for} loops terminate, which we assume of $e_0$. At each generative step, either a success rule fires or a heal rule extends $\MErr$ by one element. Since $|\MErr| \le \MRetry$, at most $\MRetry$ heal steps occur before either a success or $\rulename{Gen-Budget-Exhausted}$. Under eventually-truthful $\mathcal{O}$, a success rule fires within the budget, $\MErr$ is flushed, and the process repeats for the next generative site. Since the number of generative sites reached along the trace is finite (bounded by the size of $e_0$ plus finitely many eval expansions), the whole trace terminates. When $\mathcal{O}$ is not eventually-truthful at some site, $\rulename{Gen-Budget-Exhausted}$ fires and produces a terminal error configuration whose provenance label is exactly the failing gen, establishing Corollary~\ref{cor:blame}.
+\paragraph{Case $\rulename{Assign}$.} By the rule, $\MEnv(x) = (\_,\tau,\_,\texttt{var})$ and the assignment writes value $v$ at the same type $\tau$. Clauses (1)--(3) are preserved by the targeted-update lemma (Lean: \texttt{Env.assign\_type\_preserved}); $\MErr$ is unchanged.
+
+\paragraph{Pure-core cases ($\rulename{Var}$, $\rulename{If-*}$, $\rulename{While}$, $\rulename{For-*}$, $\rulename{Seq}$, $\rulename{Js}$).} The environment is unchanged or extended by an iteration binding at the inferred type; $\MPol$ and $\MPrin$ are unchanged. Clauses (1), (3), (4) are trivial. Clause (2) is preserved by the residual typechecker (black-boxed in the mechanization and re-invoked at each $\rulename{Gen-Success}$).
+
+\paragraph{Case $\rulename{Enforce-Install}$.} $\MEnv$ is unchanged; $\MPol$ is updated to $\MPol'$ with $\Allow{\MPol'}\subseteq\Allow{\MPol}$. No binding changes type; provenance and $\MErr$ are unchanged.
+
+\paragraph{Cases $\rulename{Agent-Success}$, $\rulename{Eval-Success}$.} Analogous to $\rulename{Gen-Success}$: each carries a runtime-type check and a residual re-check as side conditions; $\MErr$ is flushed.
+
+\subsection{(T2) Staged Materialization Soundness}
+
+The side condition $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ on $\rulename{Gen-Success}$ re-checks the entire residual expression against the extended static context. If the newly bound name $x_\ell$ appears in any subsequent type annotation position, $\Projenv{\MEnv_{n+1}}$ maps $x_\ell$ to the materialized type $\tau$. The $\StType{\cdot}{\cdot}{\cdot}$ judgment resolves name references through this map, so any downstream $\Let{y}{x_\ell}{\Gen{x_\ell}{s'}}$ is checked against the concrete $\tau$ rather than against $\Tschema$.
+
+\subsection{(T3) Policy Monotonicity}
+
+$\MPol$ is updated only by $\rulename{Enforce-Install}$, whose side condition enforces $\Allow{\MPol'} \subseteq \Allow{\MPol}$; this is where the mechanization invokes \texttt{policyInstall\_shrinks}. All other rules leave $\MPol$ unchanged. Monotonicity across the whole trace follows by transitivity. The pointwise authorization claim is immediate because each of $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, and $\rulename{Eval-Success}$ has $\PolOk{\MPol}{\MPrin}{a}$ as a side condition.
+
+\subsection{(T4a) Budget Progress}
+
+If at $C_n$ the redex is $\Gen{\tau}{s}$ and $|\MErr_n|>\MRetry$, no success or heal rule is applicable: the success rules require $\PolOk{\cdot}{\cdot}{\texttt{gen}}\wedge\RtType{\cdot}{\cdot}{\cdot}$ to hold for \emph{some} oracle response, which need not exist; the heal rules have $|\MErr\cdot\epsilon|\le\MRetry$ as a side condition, which fails. Only $\rulename{Gen-Budget-Exhausted}$ applies, and it deterministically transitions to the terminal-error configuration carrying $\MErr_n$ and the fresh provenance label.
+
+\subsection{(T4b) Truthful Gen-Success}
+
+Fix a gen-stuck configuration $C_n$ with $\PolOk{\MPol_n}{\MPrin_n}{\texttt{gen}}$. By eventually-truthfulness (\defn{def:oracle-truthful}) instantiated at $(s,\MEnv_n,\tau,\MPol_n,\MPrin_n)$, there exists $\epsilon$ with $|\epsilon|\le\MRetry$ and $v$ with $\Oracle{s}{\epsilon}{\tau}\ni v$ and $\RtType{\MEnv_n}{v}{\tau}$. The residual static-typing premise is discharged by the $\Tschema$/value wildcards of $\StType{\cdot}{\cdot}{\cdot}$, and freshness of $\ell$ by axiom. All four side conditions of $\rulename{Gen-Success}$ are met, so the rule fires and flushes $\MErr$ to $\emptyset$.
+
+\subsection{(T4c) Oracle-Relative Termination (paper-only)}
+
+Argue by a well-founded measure on reduction sequences; this clause is not mechanized because the current \texttt{Step} relation is the top-level fragment and does not include the $E[\cdot]$-congruence cases. Between two successive applications of a generative rule, only pure-core rules fire. Pure-core reduction terminates on any expression whose \texttt{while} and \texttt{for} loops terminate, which we assume of $e_0$. At each generative step, either a success rule fires or a heal rule extends $\MErr$ by one element. Since $|\MErr| \le \MRetry$, at most $\MRetry$ heal steps occur before either (T4b) fires or $|\MErr|>\MRetry$ forces (T4a). Under eventually-truthful $\mathcal{O}$, (T4b) fires within the budget, $\MErr$ is flushed, and the process repeats for the next generative site. Since the number of generative sites reached along the trace is finite (bounded by the size of $e_0$ plus finitely many eval expansions), the whole trace terminates. When $\mathcal{O}$ is not eventually-truthful at some site, (T4a) fires and produces a terminal error configuration whose provenance label, under the well-formedness assumption of Cor.~\ref{cor:blame}, is exactly the failing gen.
