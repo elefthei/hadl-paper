@@ -6,7 +6,7 @@ Lean 4 formalization of the HADL operational semantics from §4 of the paper.
 
 | Theorem | Clause | Status |
 |---|---|---|
-| `thm:hadl-sound` | T1 WF-Preservation | ✅ proven |
+| `thm:hadl-sound` | T1 WF-Preservation | ✅ proven (all §4 + appendix A rules) |
 | `thm:hadl-sound` | T2 Staged Materialization Soundness | ✅ proven |
 | `thm:hadl-sound` | T3 Policy Monotonicity | ✅ proven |
 | `thm:hadl-sound` | T4 Oracle-Relative Safety | 📄 paper only |
@@ -18,6 +18,22 @@ T1_WF_preservation        : [propext, jsEval]
 T2_staged_materialization : (none)
 T3_policy_monotonicity    : [jsEval, policyInstall_shrinks]
 ```
+
+### Mechanized rule coverage
+
+`Step` covers every rule in `semantics.tex` §4 and `appendix.tex` §A:
+
+* **L1 core:** Var, Let-Bind, Assign, If-True/False, While (unfold), For-Nil/Cons, Seq, Js.
+* **L1/L2 I/O:** Ask, Say.
+* **L2 agent:** Agent-Success, Agent-Heal-Type, Agent-Heal-Pol.
+* **L2 eval:** Eval-Success, Eval-Heal-Type, Eval-Heal-Pol.
+* **L2 gen:** Gen-Success, Gen-Heal-Type, Gen-Heal-Pol, Gen-Budget-Exhausted.
+* **L3 policy:** Enforce-Install, Enforce-Heal.
+
+Evaluation contexts `E[·]` are elided — reductions fire at the root of
+`C.expr`, which matches the paper's congruence closure of the top-level
+relation. See the module docstring in `HADL/Reduction.lean`.
+
 
 ## Build
 
@@ -42,7 +58,7 @@ Beyond standard Lean axioms (`propext`), this development declares:
 
 - `jsEval`, `jsEval_wellTyped` (`HADL/JsAxioms.lean`): axiomatize the opaque JavaScript interop layer.
 - `policyInstall_shrinks` (`HADL/Policy.lean`): monotonicity of policy install against the Cedar `isAuthorized` allow-set. Could be discharged directly against Cedar-Lean in future work.
-- Opaque constants: `PolicyNE`, `JsExprNE`, `policyAllows`, `policyInstall`, `freshLabel`, `explainType`, `explainPolicy`.
+- Opaque constants: `PolicyNE`, `JsExprNE`, `policyAllows`, `policyInstall`, `freshLabel`, `explainType`, `explainPolicy`, `provPrompt`.
 
 ## File layout
 

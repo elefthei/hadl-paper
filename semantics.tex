@@ -124,7 +124,7 @@ An oracle $\mathcal{O}$ is \emph{eventually-truthful at budget $\MRetry$} for a 
 
 \begin{theorem}[\hadl soundness]
 \label{thm:hadl-sound}
-Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact. Clause (T4) is argued only on paper and left for future mechanization.}
+Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact, covering every rule in \S\ref{sec:semantics} and Appendix~\ref{app:rules}. Clause (T4) is argued only on paper and left for future mechanization.}
 \begin{enumerate}
   \item \textbf{\textsc{(T1) WF-Preservation.}} For every $n$ with $C_n$ not a terminal error, $\WF{C_n}$.
   \item \textbf{\textsc{(T2) Staged Materialization Soundness.}} Whenever $C_n \step C_{n+1}$ is an application of $\rulename{Gen-Success}$, the residual $e_{n+1}$ type-checks against $\Projenv{\MEnv_{n+1}}$; every subsequent $\Gen{\tau'}{s'}$ with an annotation referring to a name newly bound at step $n{+}1$ is checked against the materialized concrete type.
