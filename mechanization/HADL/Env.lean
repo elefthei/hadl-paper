@@ -24,6 +24,14 @@ def lookup (ρ : Env) (x : Name) : Option Binding :=
 
 def extend (ρ : Env) (x : Name) (b : Binding) : Env := (x, b) :: ρ
 
+/-- Shadow-assign: push a new cell for `x` with an updated value, preserving
+    the old binding's static type, provenance, and mutability. If `x` has no
+    prior binding we shadow with the ambient defaults from `b`. -/
+def assign (ρ : Env) (x : Name) (v : Value) (fallback : Binding) : Env :=
+  match ρ.lookup x with
+  | some b => Env.extend ρ x { b with value := v }
+  | none   => Env.extend ρ x { fallback with value := v }
+
 def dom (ρ : Env) : List Name := ρ.map (·.1)
 
 def fresh (ρ : Env) (x : Name) : Prop := x ∉ ρ.dom

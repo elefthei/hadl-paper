@@ -35,6 +35,47 @@ inductive Step (O : Oracle) : Config → Config → Prop where
         ⟨ρ, ec, P, π, .letE m x τ (.valE v) .unit⟩
         ⟨Env.extend ρ x ⟨v, τ, none, m⟩, [], P, π, .unit⟩
 
+  | assign {ρ ec P π x v b}
+      (hlk : Env.lookup ρ x = some b)
+      (hty : b.mode = .varBind)
+      (hrt : RtType ρ v b.ty) :
+      Step O
+        ⟨ρ, ec, P, π, .assign x (.valE v)⟩
+        ⟨Env.assign ρ x v b, ec, P, π, .unit⟩
+
+  | ifTrue {ρ ec P π e₁ e₂} :
+      Step O
+        ⟨ρ, ec, P, π, .ifE (.litBool true) e₁ e₂⟩
+        ⟨ρ, ec, P, π, e₁⟩
+
+  | ifFalse {ρ ec P π e₁ e₂} :
+      Step O
+        ⟨ρ, ec, P, π, .ifE (.litBool false) e₁ e₂⟩
+        ⟨ρ, ec, P, π, e₂⟩
+
+  | whileUnfold {ρ ec P π e e'} :
+      Step O
+        ⟨ρ, ec, P, π, .whileE e e'⟩
+        ⟨ρ, ec, P, π, .ifE e (.seq e' (.whileE e e')) .unit⟩
+
+  | forNil {ρ ec P π x e} :
+      Step O
+        ⟨ρ, ec, P, π, .forE x (.valE (.vArr [])) e⟩
+        ⟨ρ, ec, P, π, .unit⟩
+
+  | forCons {ρ ec P π x τ v vs e}
+      (hrt : RtType ρ v τ)
+      (hfr : Env.fresh ρ x) :
+      Step O
+        ⟨ρ, ec, P, π, .forE x (.valE (.vArr (v :: vs))) e⟩
+        ⟨Env.extend ρ x ⟨v, τ, none, .letBind⟩, ec, P, π,
+         .seq e (.forE x (.valE (.vArr vs)) e)⟩
+
+  | seqStep {ρ ec P π v e} :
+      Step O
+        ⟨ρ, ec, P, π, .seq (.valE v) e⟩
+        ⟨ρ, ec, P, π, e⟩
+
   | jsStep {ρ ec P π je v}
       (h : jsEval je ρ = some v) :
       Step O ⟨ρ, ec, P, π, .js je⟩ ⟨ρ, ec, P, π, .valE v⟩

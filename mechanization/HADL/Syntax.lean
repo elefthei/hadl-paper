@@ -56,6 +56,7 @@ inductive Expr where
   | enforce : Name → Expr
   | js      : JsExpr → Expr
   | valE    : Value → Expr          -- lifted value (for reduction)
+  | errTerm : List String → Label → Expr -- terminal error config marker (ErrCtx)
 
 inductive Value where
   | vUnit   : Value

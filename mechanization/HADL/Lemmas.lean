@@ -23,6 +23,23 @@ theorem Env.lookup_extend_of_ne
     (Env.extend ρ x b).lookup y = ρ.lookup y := by
   simp [Env.extend, Env.lookup, h]
 
+/-- Shadow-assign preserves the old binding's ty (value is overwritten). -/
+theorem Env.lookup_assign_self_of_exists
+    {ρ : Env} {x : Name} {v : Value} {b fallback : Binding}
+    (hlk : ρ.lookup x = some b) :
+    (ρ.assign x v fallback).lookup x = some { b with value := v } := by
+  unfold Env.assign
+  rw [hlk]
+  exact Env.lookup_extend_self _ _ _
+
+/-- Shadow-assign is the identity on other keys. -/
+theorem Env.lookup_assign_of_ne
+    {ρ : Env} {x y : Name} {v : Value} {fallback : Binding}
+    (h : x ≠ y) :
+    (ρ.assign x v fallback).lookup y = ρ.lookup y := by
+  unfold Env.assign
+  split <;> exact Env.lookup_extend_of_ne _ h
+
 /-- A fresh key is not bound in ρ. -/
 theorem Env.lookup_of_fresh
     {ρ : Env} {x : Name} (h : Env.fresh ρ x) :
@@ -72,12 +89,51 @@ theorem RtType.weaken
       rw [Env.lookup_extend_of_ne _ hxy]
       exact hlk
 
+/--
+  Weakening for runtime typing across an Assign-style shadow extension.
+  The new cell carries `.varBind`, so it cannot shadow a schema binding
+  (which must be `.letBind`). This discharges the `tVarResolve` case by
+  contradiction on the mode.
+-/
+theorem RtType.weaken_to_assign
+    {ρ : Env} {v₀ : Value} {τ₀ : Ty}
+    {x : Name} {b : Binding} {v : Value}
+    (hlk_old : ρ.lookup x = some b)
+    (hvar : b.mode = .varBind)
+    (h : RtType ρ v₀ τ₀) :
+    RtType (Env.extend ρ x { b with value := v }) v₀ τ₀ := by
+  induction h with
+  | vUnit => exact .vUnit
+  | vBool => exact .vBool
+  | vInt  => exact .vInt
+  | vStr  => exact .vStr
+  | vSchema => exact .vSchema
+  | vPol  => exact .vPol
+  | tVarResolve hlk hrec ih =>
+      rename_i yname _ _
+      have hne : x ≠ yname := by
+        intro heq
+        subst heq
+        rw [hlk_old] at hlk
+        cases hlk
+        cases hvar
+      refine RtType.tVarResolve ?_ ih
+      rw [Env.lookup_extend_of_ne _ hne]
+      exact hlk
+
 theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
     (h : Step O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   cases h with
   | var _ _             => exact fun _ hp => hp
   | letBind _ _         => exact fun _ hp => hp
+  | assign _ _ _        => exact fun _ hp => hp
+  | ifTrue              => exact fun _ hp => hp
+  | ifFalse             => exact fun _ hp => hp
+  | whileUnfold         => exact fun _ hp => hp
+  | forNil              => exact fun _ hp => hp
+  | forCons _ _         => exact fun _ hp => hp
+  | seqStep             => exact fun _ hp => hp
   | jsStep _            => exact fun _ hp => hp
   | genSuccess _ _ _ _ _ _ => exact fun _ hp => hp
   | genHealType _ _ _   => exact fun _ hp => hp

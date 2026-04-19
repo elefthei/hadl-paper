@@ -35,16 +35,36 @@ theorem bindings_preserved_on_fresh_extend
     exact RtType.weaken hfr (hbinds _ _ hlk)
 
 /--
-  **T1 — WF-Preservation.** Case analysis on `hstep`. For each rule:
+  Helper: `Env.assign ρ x v b` (shadow-update of an existing var binding)
+  preserves the all-bindings-typed invariant, provided the new value has
+  the old type and the old binding is in var-mode.
+-/
+theorem bindings_preserved_on_assign
+    {ρ : Env} {x : Name} {v : Value} {b : Binding}
+    (hbinds : ∀ y b', ρ.lookup y = some b' → RtType ρ b'.value b'.ty)
+    (hlk    : ρ.lookup x = some b)
+    (hvar   : b.mode = .varBind)
+    (hrt    : RtType ρ v b.ty) :
+    ∀ y b', (Env.assign ρ x v b).lookup y = some b' →
+            RtType (Env.assign ρ x v b) b'.value b'.ty := by
+  intro y b' hlk'
+  unfold Env.assign at hlk' ⊢
+  rw [hlk] at hlk' ⊢
+  -- Now the new env = Env.extend ρ x { b with value := v }.
+  by_cases hxy : x = y
+  · subst hxy
+    rw [Env.lookup_extend_self] at hlk'
+    cases hlk'
+    -- goal: RtType (extend ...) v b.ty
+    exact RtType.weaken_to_assign hlk hvar hrt
+  · rw [Env.lookup_extend_of_ne _ hxy] at hlk'
+    exact RtType.weaken_to_assign hlk hvar (hbinds _ _ hlk')
 
-  * **Residual typing.** Discharged by `StType.schemaWildcard`.
-  * **Bindings well-typed.** Rules that do not touch ρ preserve `hbinds`
-    directly. The two extending rules (`letBind`, `genSuccess`) use
-    `bindings_preserved_on_fresh_extend` with the rule's own `hrt` and
-    `hfr` side conditions.
-  * **Provenance acyclic.** Our placeholder `Env.provAcyclic := True`.
-  * **Heal-length bound.** Rule side condition (`genHeal*`), a flush to `[]`
-    (`letBind`, `genSuccess`), or unchanged (`var`, `jsStep`, `enforceInstall`).
+/--
+  **T1 — WF-Preservation.** Case analysis on `hstep`, with each rule
+  discharging the four clauses of `Config.WF`. Uses `StType.schemaWildcard`
+  for residual-typing, `bindings_preserved_on_fresh_extend` for the
+  env-extending rules, and `bindings_preserved_on_assign` for Assign.
 -/
 theorem T1_WF_preservation
     {O : Oracle} {C C' : Config}
@@ -57,6 +77,22 @@ theorem T1_WF_preservation
   | letBind hrt hfr =>
       refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
       exact bindings_preserved_on_fresh_extend hbinds hfr hrt
+  | assign hlk hvar hrt =>
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact bindings_preserved_on_assign hbinds hlk hvar hrt
+  | ifTrue =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | ifFalse =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | whileUnfold =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | forNil =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+  | forCons hrt hfr =>
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact bindings_preserved_on_fresh_extend hbinds hfr hrt
+  | seqStep =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
   | jsStep _ =>
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
   | genSuccess _ _ hrt hstage _ hfr =>
