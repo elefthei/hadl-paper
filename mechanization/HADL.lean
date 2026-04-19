@@ -17,3 +17,5 @@ import HADL.Reduction
 import HADL.Lemmas
 import HADL.Soundness
 import HADL.Safety
+import HADL.Extract
+import HADL.ExtractShape
