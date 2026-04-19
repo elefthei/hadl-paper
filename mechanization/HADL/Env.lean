@@ -24,6 +24,10 @@ def lookup (ρ : Env) (x : Name) : Option Binding :=
 
 def extend (ρ : Env) (x : Name) (b : Binding) : Env := (x, b) :: ρ
 
+def dom (ρ : Env) : List Name := ρ.map (·.1)
+
+def fresh (ρ : Env) (x : Name) : Prop := x ∉ ρ.dom
+
 notation ρ " ⊕ " "[" x " ↦ " b "]" => Env.extend ρ x b
 
 /--

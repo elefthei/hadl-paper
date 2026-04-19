@@ -29,7 +29,8 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       Step O ⟨ρ, ec, P, π, .var x⟩ ⟨ρ, ec, P, π, .valE v⟩
 
   | letBind {ρ ec P π m x τ v}
-      (hrt : RtType ρ v τ) :
+      (hrt : RtType ρ v τ)
+      (hfr : Env.fresh ρ x) :
       Step O
         ⟨ρ, ec, P, π, .letE m x τ (.valE v) .unit⟩
         ⟨Env.extend ρ x ⟨v, τ, none, m⟩, [], P, π, .unit⟩
@@ -46,7 +47,8 @@ inductive Step (O : Oracle) : Config → Config → Prop where
                   (Env.proj (Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩))
                   (.valE v)
                   τ)
-      (hfresh : ℓ = freshLabel ρ (.gen τ s none)) :
+      (hfresh : ℓ = freshLabel ρ (.gen τ s none))
+      (hfr    : Env.fresh ρ (toString ℓ)) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
         ⟨Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩,

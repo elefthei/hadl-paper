@@ -6,10 +6,18 @@ Lean 4 formalization of the HADL operational semantics from §4 of the paper.
 
 | Theorem | Clause | Status |
 |---|---|---|
-| `thm:hadl-sound` | T1 WF-Preservation | 🚧 in progress |
-| `thm:hadl-sound` | T2 Staged Materialization Soundness | 🚧 in progress |
-| `thm:hadl-sound` | T3 Policy Monotonicity | 🚧 in progress |
+| `thm:hadl-sound` | T1 WF-Preservation | ✅ proven |
+| `thm:hadl-sound` | T2 Staged Materialization Soundness | ✅ proven |
+| `thm:hadl-sound` | T3 Policy Monotonicity | ✅ proven |
 | `thm:hadl-sound` | T4 Oracle-Relative Safety | 📄 paper only |
+
+All three mechanized theorems are free of `sorry`. `#print axioms` reports:
+
+```
+T1_WF_preservation        : [propext, jsEval]
+T2_staged_materialization : (none)
+T3_policy_monotonicity    : [jsEval, policyInstall_shrinks]
+```
 
 ## Build
 
@@ -30,12 +38,11 @@ First build is long: Mathlib + Cedar-Lean transitive compilation (~30-60 min on 
 
 ## Axioms
 
-Beyond standard `Classical`/choice, this development declares:
+Beyond standard Lean axioms (`propext`), this development declares:
 
-- `jsEval`, `jsEval_wellTyped` (axiomatize the opaque JavaScript interop layer)
-- possibly `install_allows_shrink` (if Cedar-level monotonicity of policy install cannot be discharged directly against `cedar-lean`'s `isAuthorized`)
-
-See `HADL/JsAxioms.lean` and `HADL/Policy.lean` for the full statements.
+- `jsEval`, `jsEval_wellTyped` (`HADL/JsAxioms.lean`): axiomatize the opaque JavaScript interop layer.
+- `policyInstall_shrinks` (`HADL/Policy.lean`): monotonicity of policy install against the Cedar `isAuthorized` allow-set. Could be discharged directly against Cedar-Lean in future work.
+- Opaque constants: `PolicyNE`, `JsExprNE`, `policyAllows`, `policyInstall`, `freshLabel`, `explainType`, `explainPolicy`.
 
 ## File layout
 
