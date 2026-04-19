@@ -20,3 +20,4 @@ import HADL.Safety
 import HADL.Extract
 import HADL.ExtractShape
 import HADL.BigStep
+import HADL.Safety2
