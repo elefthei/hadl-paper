@@ -188,6 +188,15 @@ inductive Step (O : Oracle) : Config → Config → Prop where
         ⟨ρ, ec, P, π, .evalE e args⟩
         ⟨ρ, ec ++ [explainPolicy π P], P, π, .evalE e args⟩
 
+  -- L2: Gen-Budget-Exhausted. When the err-context grows beyond the retry
+  -- budget, reduction stops at a terminal error marker, carrying the
+  -- accumulated explanations and the source label for diagnostics.
+  | genBudgetExhausted {ρ ec P π τ s ℓ}
+      (_hover : ec.length > retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .gen τ s none⟩
+        ⟨ρ, ec, P, π, .errTerm ec ℓ⟩
+
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C
   | step {C C' C''} : Step O C C' → Steps O C' C'' → Steps O C C''

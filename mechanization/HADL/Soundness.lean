@@ -11,8 +11,8 @@ import HADL.Lemmas
 
 namespace HADL
 
-/-- Placeholder: no rule in the selected fragment produces a terminal error. -/
-def Config.isErr (_C : Config) : Prop := False
+/-- A config is an error config iff its expression is the terminal error marker. -/
+def Config.isErr (C : Config) : Prop := ∃ ec ℓ, C.expr = .errTerm ec ℓ
 
 /--
   Helper: if every binding of ρ is runtime-typed, and we extend ρ with a
@@ -150,6 +150,9 @@ theorem T1_WF_preservation
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
   | evalHealPol _ hbudget =>
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+  | genBudgetExhausted _ =>
+      -- C' has expr = .errTerm, contradicting `¬ C'.isErr`.
+      exact absurd ⟨_, _, rfl⟩ _hne
 
 /--
   **T2 — Staged Materialization Soundness.** Direct read-off of the

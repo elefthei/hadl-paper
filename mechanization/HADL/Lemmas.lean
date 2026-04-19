@@ -148,6 +148,7 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | evalSuccess _ _ _ _ => exact fun _ hp => hp
   | evalHealType _ _    => exact fun _ hp => hp
   | evalHealPol _ _     => exact fun _ hp => hp
+  | genBudgetExhausted _ => exact fun _ hp => hp
 
 theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}
     (h : Steps O C C') :
