@@ -36,6 +36,17 @@ def dom (ρ : Env) : List Name := ρ.map (·.1)
 
 def fresh (ρ : Env) (x : Name) : Prop := x ∉ ρ.dom
 
+/-- Batched extend: extends ρ with every pair in `xs` from left to right. -/
+def extendAll (ρ : Env) : List (Name × Binding) → Env
+  | []            => ρ
+  | (x, b) :: xs  => extendAll (Env.extend ρ x b) xs
+
+/-- Pairwise-fresh batch: each name in `xs` is fresh in the env extended
+    by the previous entries. -/
+def freshAll (ρ : Env) : List (Name × Binding) → Prop
+  | []            => True
+  | (x, b) :: xs  => Env.fresh ρ x ∧ freshAll (Env.extend ρ x b) xs
+
 notation ρ " ⊕ " "[" x " ↦ " b "]" => Env.extend ρ x b
 
 /--

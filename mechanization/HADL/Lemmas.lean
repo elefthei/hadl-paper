@@ -145,6 +145,9 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | agentSuccess _ _ _  => exact fun _ hp => hp
   | agentHealType _ _ _ => exact fun _ hp => hp
   | agentHealPol _ _    => exact fun _ hp => hp
+  | evalSuccess _ _ _ _ => exact fun _ hp => hp
+  | evalHealType _ _    => exact fun _ hp => hp
+  | evalHealPol _ _     => exact fun _ hp => hp
 
 theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}
     (h : Steps O C C') :

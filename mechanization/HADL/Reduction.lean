@@ -158,6 +158,36 @@ inductive Step (O : Oracle) : Config → Config → Prop where
         ⟨ρ, ec, P, π, .agent τ s pr⟩
         ⟨ρ, ec ++ [explainPolicy π P], P, π, .agent τ s pr⟩
 
+  -- L2: Eval family. Invokes a workflow value (vClos) extending the env
+  -- with the parameter bindings `bs`. The rule takes `bs` as a witness
+  -- packaging (xᵢ, vᵢ, Tᵢ) together; the name/value/type correspondence
+  -- is checked by the oracle upstream and not re-checked in the rule.
+  | evalSuccess {ρ ec P π xs body} {vs : List Value} {bs : List (Name × Binding)}
+      (hauth   : policyAllows P π .evalA)
+      (_hshape : xs.length = vs.length ∧ vs.length = bs.length)
+      (hrt     : ∀ (x : Name) (b : Binding), (x, b) ∈ bs → RtType ρ b.value b.ty)
+      (hfr     : Env.freshAll ρ bs) :
+      Step O
+        ⟨ρ, ec, P, π, .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
+        ⟨Env.extendAll ρ bs, ec, P, π, body⟩
+
+  | evalHealType {ρ ec P π xs body} {vs : List Value}
+      (_hbad   : ¬ ∃ bs : List (Name × Binding),
+                      ∀ (x : Name) (b : Binding), (x, b) ∈ bs →
+                        RtType ρ b.value b.ty)
+      (hbudget : (ec ++ [explainType (.vClos xs body) .tUnit]).length ≤ retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
+        ⟨ρ, ec ++ [explainType (.vClos xs body) .tUnit], P, π,
+         .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
+
+  | evalHealPol {ρ ec P π e args}
+      (_hdeny  : ¬ policyAllows P π .evalA)
+      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .evalE e args⟩
+        ⟨ρ, ec ++ [explainPolicy π P], P, π, .evalE e args⟩
+
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C
   | step {C C' C''} : Step O C C' → Steps O C' C'' → Steps O C C''

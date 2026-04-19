@@ -61,6 +61,35 @@ theorem bindings_preserved_on_assign
     exact RtType.weaken_to_assign hlk hvar (hbinds _ _ hlk')
 
 /--
+  Helper: batched fresh-extend preserves the bindings-typed invariant.
+  Proceeds by induction on the batch list.
+-/
+theorem bindings_preserved_on_fresh_extendAll
+    (ρ : Env) (bs : List (Name × Binding))
+    (hbinds : ∀ y b, ρ.lookup y = some b → RtType ρ b.value b.ty)
+    (hfr    : Env.freshAll ρ bs)
+    (hrt    : ∀ (x : Name) (b : Binding), (x, b) ∈ bs → RtType ρ b.value b.ty) :
+    ∀ y b, (Env.extendAll ρ bs).lookup y = some b →
+           RtType (Env.extendAll ρ bs) b.value b.ty := by
+  induction bs generalizing ρ with
+  | nil => intro y b hlk; exact hbinds y b hlk
+  | cons head rest ih =>
+      rcases head with ⟨x, b₀⟩
+      simp only [Env.extendAll, Env.freshAll] at *
+      obtain ⟨hfr₀, hfrRest⟩ := hfr
+      have hrt₀ : RtType ρ b₀.value b₀.ty := hrt x b₀ List.mem_cons_self
+      have hbinds' :
+          ∀ y b, (Env.extend ρ x b₀).lookup y = some b →
+                 RtType (Env.extend ρ x b₀) b.value b.ty :=
+        bindings_preserved_on_fresh_extend hbinds hfr₀ hrt₀
+      have hrt' :
+          ∀ (x' : Name) (b' : Binding), (x', b') ∈ rest →
+            RtType (Env.extend ρ x b₀) b'.value b'.ty := by
+        intro x' b' hmem
+        exact RtType.weaken hfr₀ (hrt x' b' (List.mem_cons_of_mem _ hmem))
+      exact ih (Env.extend ρ x b₀) hbinds' hfrRest hrt'
+
+/--
   **T1 — WF-Preservation.** Case analysis on `hstep`, with each rule
   discharging the four clauses of `Config.WF`. Uses `StType.schemaWildcard`
   for residual-typing, `bindings_preserved_on_fresh_extend` for the
@@ -113,6 +142,13 @@ theorem T1_WF_preservation
   | agentHealType _ _ hbudget =>
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
   | agentHealPol _ hbudget =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+  | evalSuccess _ _ hrt hfr =>
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact bindings_preserved_on_fresh_extendAll _ _ hbinds hfr hrt
+  | evalHealType _ hbudget =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+  | evalHealPol _ hbudget =>
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
 
 /--
