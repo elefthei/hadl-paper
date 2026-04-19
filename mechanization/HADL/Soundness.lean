@@ -153,6 +153,8 @@ theorem T1_WF_preservation
   | genBudgetExhausted _ =>
       -- C' has expr = .errTerm, contradicting `¬ C'.isErr`.
       exact absurd ⟨_, _, rfl⟩ _hne
+  | enforceHeal _ _ _ _ hbudget =>
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
 
 /--
   **T2 — Staged Materialization Soundness.** Direct read-off of the

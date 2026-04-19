@@ -17,6 +17,9 @@ def EvalCtx.plug : EvalCtx → Expr → Expr
 opaque freshLabel (ρ : Env) (e : Expr) : Label
 opaque explainType   : Value → Ty → String
 opaque explainPolicy : Principal → Policy → String
+/-- The prompt recorded in the provenance of the binding for a name.
+    Used by Enforce-Heal to rewind to the causal gen. -/
+opaque provPrompt : Env → Name → String
 
 /--
   Small-step relation `C ⟶ C'`, parameterized by an oracle `O`.
@@ -196,6 +199,20 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
         ⟨ρ, ec, P, π, .errTerm ec ℓ⟩
+
+  -- L3: Enforce-Heal. When `policyInstall` is undefined for the policy
+  -- value bound to `x`, append the explanation to ε and rewrite the redex
+  -- back to a gen of Tpolicy using the prompt recorded in the provenance
+  -- of `x`.
+  | enforceHeal {ρ ec P π x p b}
+      (hb     : Env.lookup ρ x = some b)
+      (hpol   : b.value = .vPol p)
+      (hty    : b.ty = .tPolicy)
+      (_hbad  : policyInstall P p = none)
+      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      Step O
+        ⟨ρ, ec, P, π, .enforce x⟩
+        ⟨ρ, ec ++ [explainPolicy π P], P, π, .gen .tPolicy (provPrompt ρ x) none⟩
 
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C
