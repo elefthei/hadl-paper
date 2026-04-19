@@ -21,6 +21,11 @@ inductive StType : StCtx → Expr → Ty → Prop where
       -- Any expression synthesized against a Schema binding is accepted
       -- at Schema; it will be re-checked at materialization time.
       StType Γ e .tSchema
+  | valueWildcard {Γ v τ} :
+      -- A lifted `valE` typechecks at any τ at the stage level; its
+      -- runtime typing is the binding clause checked separately by
+      -- `RtType`.
+      StType Γ (.valE v) τ
 
 /-- Runtime typing judgment `ρ ⊨ v : τ`. -/
 inductive RtType : Env → Value → Ty → Prop where

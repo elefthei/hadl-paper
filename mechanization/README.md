@@ -9,15 +9,33 @@ Lean 4 formalization of the HADL operational semantics from §4 of the paper.
 | `thm:hadl-sound` | T1 WF-Preservation | ✅ proven (all §4 + appendix A rules) |
 | `thm:hadl-sound` | T2 Staged Materialization Soundness | ✅ proven |
 | `thm:hadl-sound` | T3 Policy Monotonicity | ✅ proven |
-| `thm:hadl-sound` | T4 Oracle-Relative Safety | 📄 paper only |
+| `thm:hadl-sound` | T4 Oracle-Relative Safety | ✅ gen-local fragments (`Safety.lean`) |
 
-All three mechanized theorems are free of `sorry`. `#print axioms` reports:
+All four mechanized theorems are free of `sorry`. `#print axioms` reports:
 
 ```
 T1_WF_preservation        : [propext, jsEval]
 T2_staged_materialization : (none)
 T3_policy_monotonicity    : [jsEval, policyInstall_shrinks]
+T4_budget_progress        : [jsEval]
+T4_truthful_success       : [jsEval, freshLabel_is_fresh]
 ```
+
+### T4 scope note
+
+T4 is mechanized as two gen-local fragments in `HADL/Safety.lean`:
+
+* **Budget progress** — once `|ε| > retryBudget`, `Gen-Budget-Exhausted`
+  fires deterministically.
+* **Truthful oracle ⇒ Gen-Success** — an *eventually-truthful* oracle at
+  an authorized policy yields an `ε`, `v`, and a `Gen-Success` step
+  flushing `ε` to `[]`.
+
+Full trace-level T4 ("every trace terminates in a value or blamed
+`errTerm`") additionally requires (i) an E[·] congruence extension to
+`Step` and (ii) a termination hypothesis on the pure-core fragment; both
+are treated informally in the paper (§4 T4, Appendix A) and left to
+future mechanization.
 
 ### Mechanized rule coverage
 
