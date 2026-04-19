@@ -1,0 +1,119 @@
+\appendix
+
+\section{Full Reduction Rules}
+\label{app:rules}
+
+This appendix gives the reduction rules elided from \sect{sec:sem-reduction}. Evaluation contexts $E$ are the standard left-to-right contexts over sequencing, conditionals, loops, assignment right-hand sides, and primitive arguments.
+
+\subsection{Pure Core (L1)}
+\label{app:rules-core}
+
+\begin{mathpar}
+\inferrule*[right=\rulename{Assign}]
+  {\MEnv(x) = (\_,\tau,p,\texttt{var})}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Assign{x}{v}} \step \MConfig{\MEnv[\MBind{x}{v}{\tau}{p}{\texttt{var}}]}{\MErr}{\MPol}{\MPrin}{\Tunit}}
+
+\inferrule*[right=\rulename{Var-Bind}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Var{x}{\tau}{v}} \step \MConfig{\MEnv[\MBind{x}{v}{\tau}{\emptyset}{\texttt{var}}]}{\emptyset}{\MPol}{\MPrin}{\Tunit}}
+
+\inferrule*[right=\rulename{If-True}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Iff{\texttt{true}}{e_1}{e_2}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e_1}}
+
+\inferrule*[right=\rulename{If-False}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Iff{\texttt{false}}{e_1}{e_2}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e_2}}
+
+\inferrule*[right=\rulename{While}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Whl{e}{e'}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Iff{e}{\Seq{e'}{\Whl{e}{e'}}}{\Tunit}}}
+
+\inferrule*[right=\rulename{For-Nil}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Forr{x}{[]}{e}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Tunit}}
+
+\inferrule*[right=\rulename{For-Cons}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Forr{x}{v::vs}{e}} \step \MConfig{\MEnv[\MBind{x}{v}{\tau}{\emptyset}{\texttt{let}}]}{\MErr}{\MPol}{\MPrin}{\Seq{e}{\Forr{x}{vs}{e}}}}
+
+\inferrule*[right=\rulename{Seq}]
+  { }
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Seq{v}{e}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e}}
+
+\inferrule*[right=\rulename{Js}]
+  {\JOracle{\MEnv}{c} = v}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Js{c}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{v}}
+\end{mathpar}
+
+\subsection{Ask, Say, Agent, Eval (L1/L2)}
+\label{app:rules-io}
+
+\begin{mathpar}
+\inferrule*[right=\rulename{Ask}]
+  {\text{human provides }v : \Tstring}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Ask{s}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{v}}
+
+\inferrule*[right=\rulename{Say}]
+  {\text{emit }s\text{ to output stream}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Say{s}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Tunit}}
+
+\inferrule*[right=\rulename{Agent-Success}]
+  {\PolOk{\MPol}{\MPrin}{\texttt{agent}} \\
+   \Oracle{s}{\MErr}{\Tstring} \ni v \\
+   \RtType{\MEnv}{v}{\Tstring}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Agent{s}]} \step \MConfig{\MEnv}{\emptyset}{\MPol}{\MPrin}{E[v]}}
+
+\inferrule*[right=\rulename{Eval-Success}]
+  {\PolOk{\MPol}{\MPrin}{\texttt{eval}} \\
+   v = \MEnv(f) \\
+   v = \texttt{workflow}\;f(\overline{x_i{:}T_i}) \to T\;\{e_b\} \\
+   \forall i.\,\RtType{\MEnv}{v_i}{T_i}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Eval{f}{\overline{v_i}}]} \step \MConfig{\MEnv[\overline{\MBind{x_i}{v_i}{T_i}{\emptyset}{\texttt{let}}}]}{\MErr}{\MPol}{\MPrin}{E[e_b]}}
+\end{mathpar}
+
+The $\rulename{Agent-Success}$ rule mirrors $\rulename{Gen-Success}$ but always returns $\Tstring$, so no residual re-type-check is needed. $\rulename{Eval-Success}$ invokes a workflow value that was either defined statically or produced by a prior arrow-typed $\Gen{\Tarrow{A}{R}}{s}$; argument types are checked at the call site and the body $e_b$ reduces in the caller's environment extended with the parameter bindings.
+
+\subsection{Agent and Eval Heal}
+\label{app:rules-heal}
+
+Heal rules for $\Agent{s}$ and $\Eval{f}{\overline{v_i}}$ mirror $\rulename{Gen-Heal-Type}$ and $\rulename{Gen-Heal-Pol}$:
+
+\begin{mathpar}
+\inferrule*[right=\rulename{Agent-Heal-Type}]
+  {\Oracle{s}{\MErr}{\Tstring} \ni v \\
+   \lnot\,\RtType{\MEnv}{v}{\Tstring} \\
+   \epsilon = \Explain{v}{\Tstring} \\
+   |\MErr \cdot \epsilon| \le \MRetry}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Agent{s}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Agent{s}]}}
+
+\inferrule*[right=\rulename{Enforce-Heal}]
+  {\MEnv(x) = (p,\Tpolicy,\_,\_) \\
+   \Install{\MPol}{p} \text{ undefined or widens} \\
+   \epsilon = \Explain{p}{\MPol} \\
+   |\MErr \cdot \epsilon| \le \MRetry}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Enforce{x}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Gen{\Tpolicy}{s_x}]}}
+\end{mathpar}
+
+In $\rulename{Enforce-Heal}$, $s_x$ denotes the prompt recorded in the provenance of the binding for $x$. The rule rewinds to the causal gen so the oracle can retry with the Cedar compilation or monotonicity error as feedback.
+
+\section{Proof of Theorem~\ref{thm:hadl-sound}}
+\label{app:proof}
+
+The body sketches the argument; here we expand case analysis for the subtler cases.
+
+\paragraph{\textsc{(T1) Case $\rulename{Gen-Success}$.}} Assume $\WF{C_n}$. We must show $\WF{C_{n+1}}$. Four side conditions of the rule discharge the four clauses of well-formedness:
+\begin{itemize}
+  \item $\RtType{\MEnv_n}{v}{\tau}$ establishes clause (1) for the new binding.
+  \item $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ is exactly clause (2).
+  \item The provenance label $\ell$ for the new binding is fresh (it is the source span of the $\Gen{\tau}{s}$ call) and cannot create a cycle, establishing clause (3).
+  \item $\MErr_{n+1} = \emptyset$, trivially within budget, establishing clause (4).
+\end{itemize}
+
+\paragraph{\textsc{(T1) Case $\rulename{Gen-Heal-Type}$.}} Assume $\WF{C_n}$. $\MEnv$ and $\MPol$ are unchanged, so clauses (1)--(3) carry over. Clause (4) follows from the rule's side condition $|\MErr \cdot \epsilon| \le \MRetry$.
+
+\paragraph{\textsc{(T2).}} The side condition $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ on $\rulename{Gen-Success}$ re-checks the entire residual expression against the extended static context. If the newly bound name $x_\ell$ appears in any subsequent type annotation position, $\Projenv{\MEnv_{n+1}}$ maps $x_\ell$ to the materialized type $\tau$. The $\StType{\cdot}{\cdot}{\cdot}$ judgment resolves name references through this map, so any downstream $\Let{y}{x_\ell}{\Gen{x_\ell}{s'}}$ is checked against the concrete $\tau$ rather than against $\Tschema$.
+
+\paragraph{\textsc{(T3).}} $\MPol$ is updated only by $\rulename{Enforce-Install}$, whose side condition enforces $\Allow{\MPol'} \subseteq \Allow{\MPol}$. Monotonicity across the whole trace follows by transitivity. The authorization claim is immediate because each of $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, and $\rulename{Eval-Success}$ has $\PolOk{\MPol}{\MPrin}{a}$ as a side condition.
+
+\paragraph{\textsc{(T4).}} We argue termination. Between two successive applications of a generative rule ($\rulename{Gen-Success}$, $\rulename{Agent-Success}$, $\rulename{Eval-Success}$), only pure-core rules fire. Pure-core reduction terminates on any expression whose \texttt{while} and \texttt{for} loops terminate, which we assume of $e_0$. At each generative step, either a success rule fires or a heal rule extends $\MErr$ by one element. Since $|\MErr| \le \MRetry$, at most $\MRetry$ heal steps occur before either a success or $\rulename{Gen-Budget-Exhausted}$. Under eventually-truthful $\mathcal{O}$, a success rule fires within the budget, $\MErr$ is flushed, and the process repeats for the next generative site. Since the number of generative sites reached along the trace is finite (bounded by the size of $e_0$ plus finitely many eval expansions), the whole trace terminates. When $\mathcal{O}$ is not eventually-truthful at some site, $\rulename{Gen-Budget-Exhausted}$ fires and produces a terminal error configuration whose provenance label is exactly the failing gen, establishing Corollary~\ref{cor:blame}.
