@@ -15,8 +15,20 @@
 import HADL.Safety
 import HADL.BigStep
 import HADL.ExtractShape
+import HADL.Hygiene
 
 namespace HADL
+
+/--
+  The opaque `freshLabel` produces a string that belongs to the reserved
+  namespace (starts with `Extract.freshPrefix = "__ex_"`).  Combined with
+  `freshLabel_is_fresh`, this gives us that the label's string form is
+  both fresh in ρ and syntactically disjoint from any non-reserved source
+  name.  Declared as an axiom; consistent with implementations where
+  labels are generated from a counter prefixed with `"__ex_lbl"`.
+-/
+axiom freshLabel_is_reserved (ρ : Env) (e : Expr) :
+    Name.IsRes (toString (freshLabel ρ e))
 
 /--
   **Extract-based gen progress.**  If `Extract` of an expression `e'`
@@ -31,6 +43,12 @@ namespace HADL
   from `Extract` (i.e. in some left-to-right evaluation position).
   No E[·] congruence rules are needed; the `Extract` defunctionalization
   of Phase A does the routing.
+
+  The hygiene hypotheses `hτ_hyg`, `hρ_hyg`, together with the freshness
+  hypotheses `hx_fresh`, `hx_ne_lbl`, close the two technical gaps that
+  the gen-case progress proof hits: weakening `RtType` across the
+  label-binding extension, and freshness of the extract binder `x` in
+  the extended env.
 -/
 theorem T4_gStep_progress_gen
     {O : Oracle} {ρ : Env} {P : Policy} {π : Principal}
@@ -38,7 +56,11 @@ theorem T4_gStep_progress_gen
     (hET   : Oracle.EventuallyTruthful O retryBudget)
     (hauth : policyAllows P π .gen)
     (hext  : Extract e' = some (pre, x, suf))
-    (hpre  : pre = .gen τ s none) :
+    (hpre  : pre = .gen τ s none)
+    (hτ_hyg   : τ.hygienic)
+    (hρ_hyg   : ρ.Hygienic)
+    (hx_fresh : Env.fresh ρ x)
+    (hx_ne_lbl : x ≠ toString (freshLabel ρ (.gen τ s none))) :
     ∃ (ec : ErrCtx) (C' : Config),
       GStep O ⟨ρ, ec, P, π, e'⟩ C' := by
   subst hpre
@@ -55,9 +77,12 @@ theorem T4_gStep_progress_gen
             (hext := hext)
             (hpre := ?_) (hrt := ?_) (hfr := ?_)⟩
   · exact hstep
-  · -- RtType weakening admitted.
-    sorry
-  · -- Freshness of reserved binder admitted.
-    sorry
+  · -- RtType weakening across the label binding.
+    exact RtType.weaken_extend_reserved hrt hτ_hyg hρ_hyg
+            (freshLabel_is_reserved ρ (.gen τ s none))
+  · -- Freshness: x ≠ toString ℓ and x fresh in ρ.
+    show x ∉ (Env.extend ρ _ _).dom
+    simp only [Env.extend, Env.dom, List.map, List.mem_cons, not_or]
+    exact ⟨fun h => hx_ne_lbl h, hx_fresh⟩
 
 end HADL
