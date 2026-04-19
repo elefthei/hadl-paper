@@ -19,6 +19,6 @@ Tobin-Hochstadt and Felleisen~\cite{tobinhochstadt2006interlanguage,tobinhochsta
 
 \subsection{Metacircular Interpretation and Policy Languages}
 
-HADL's \texttt{eval} expression draws on the metacircular interpretation tradition~\cite{mccarthy1960recursive,reynolds1972definitional,landin1964mechanical,abelson2022structure,friedman2001essentials,amin2017collapsing}, where LLM tool calls generate HADL workflows as JSON-serialized ASTs, and the typed \texttt{eval} expression deserializes and executes them with type checking at the call site.
+HADL's \texttt{eval} expression draws on the metacircular interpretation tradition~\cite{mccarthy1960recursive,reynolds1972definitional,landin1964mechanical,abelson2022structure,friedman2001essentials,amin2017collapsing}, where LLM gen calls generate HADL workflows as JSON-serialized ASTs, and the typed \texttt{eval} expression deserializes and executes them with type checking at the call site.
 
 HADL integrates Cedar~\cite{cutler2024cedar}, a formally verified policy language supporting (principal, action, resource) authorization. HADL's contribution is embedding Cedar's model directly into the runtime evaluation loop and enabling gradual policy generation where LLMs produce Cedar policies at runtime that are compiled and merged in an append-only fashion.
