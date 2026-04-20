@@ -14,11 +14,13 @@ def EvalCtx.plug : EvalCtx → Expr → Expr
   | .hole, e => e
   | _, e => e
 
-opaque freshLabel (ρ : Env) (e : Expr) : Label
 opaque explainType   : Value → Ty → String
 opaque explainPolicy : Principal → Policy → String
-/-- The prompt recorded in the provenance of the binding for a name.
-    Used by Enforce-Heal to rewind to the causal gen. -/
+/-- Implementation-supplied prompt for regenerating the policy value bound
+    to `x` on Enforce-Heal. Opaque: in the formal model we do not commit
+    to how the implementation recovers the prompt — this abstracts over
+    whether it is stored alongside the binding, in a registry, or in the
+    IDE. -/
 opaque provPrompt : Env → Name → String
 
 /--
@@ -36,7 +38,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (hfr : Env.fresh ρ x) :
       Step O
         ⟨ρ, ec, P, π, .letE m x τ (.valE v) .unit⟩
-        ⟨Env.extend ρ x ⟨v, τ, none, m⟩, [], P, π, .unit⟩
+        ⟨Env.extend ρ x ⟨v, τ, m⟩, ec, P, π, .unit⟩
 
   | assign {ρ ec P π x v b}
       (hlk : Env.lookup ρ x = some b)
@@ -71,7 +73,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (hfr : Env.fresh ρ x) :
       Step O
         ⟨ρ, ec, P, π, .forE x (.valE (.vArr (v :: vs))) e⟩
-        ⟨Env.extend ρ x ⟨v, τ, none, .letBind⟩, ec, P, π,
+        ⟨Env.extend ρ x ⟨v, τ, .letBind⟩, ec, P, π,
          .seq e (.forE x (.valE (.vArr vs)) e)⟩
 
   | seqStep {ρ ec P π v e} :
@@ -83,35 +85,29 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (h : jsEval je ρ = some v) :
       Step O ⟨ρ, ec, P, π, .js je⟩ ⟨ρ, ec, P, π, .valE v⟩
 
-  | genSuccess {ρ ec P π τ s v ℓ}
+  | genSuccess {ρ ec P π τ s v}
       (hauth  : policyAllows P π .gen)
       (horacle : O s ec τ v)
       (hrt    : RtType ρ v τ)
-      (hstage : StType
-                  (Env.proj (Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩))
-                  (.valE v)
-                  τ)
-      (hfresh : ℓ = freshLabel ρ (.gen τ s none))
-      (hfr    : Env.fresh ρ (toString ℓ)) :
+      (hstage : StType (Env.proj ρ) (.valE v) τ) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩,
-         [], P, π, .valE v⟩
+        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
 
   | genHealType {ρ ec P π τ s v}
       (horacle : O s ec τ v)
       (hbad    : ¬ RtType ρ v τ)
-      (hbudget : (ec ++ [explainType v τ]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType v τ)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec ++ [explainType v τ], P, π, .gen τ s none⟩
+        ⟨ρ, ec ++ [Event.error (explainType v τ)], P, π, .gen τ s none⟩
 
   | genHealPol {ρ ec P π τ s}
       (hdeny   : ¬ policyAllows P π .gen)
-      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec ++ [explainPolicy π P], P, π, .gen τ s none⟩
+        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .gen τ s none⟩
 
   | enforceInstall {ρ ec P P' π x p b}
       (hb   : Env.lookup ρ x = some b)
@@ -129,7 +125,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (hrt     : RtType ρ v .tString) :
       Step O
         ⟨ρ, ec, P, π, .ask s⟩
-        ⟨ρ, [], P, π, .valE v⟩
+        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
 
   | sayStep {ρ ec P π s} :
       Step O
@@ -137,29 +133,29 @@ inductive Step (O : Oracle) : Config → Config → Prop where
         ⟨ρ, ec, P, π, .unit⟩
 
   -- L2: Agent family. Agent-Success mirrors Gen-Success but inlines the
-  -- returned value rather than binding it, flushing the err-context.
+  -- returned value rather than binding it, appending a success event.
   | agentSuccess {ρ ec P π τ s pr v}
       (hauth   : policyAllows P π .agent)
       (horacle : O s ec τ v)
       (hrt     : RtType ρ v τ) :
       Step O
         ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, [], P, π, .valE v⟩
+        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
 
   | agentHealType {ρ ec P π τ s pr v}
       (horacle : O s ec τ v)
       (hbad    : ¬ RtType ρ v τ)
-      (hbudget : (ec ++ [explainType v τ]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType v τ)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, ec ++ [explainType v τ], P, π, .agent τ s pr⟩
+        ⟨ρ, ec ++ [Event.error (explainType v τ)], P, π, .agent τ s pr⟩
 
   | agentHealPol {ρ ec P π τ s pr}
       (hdeny   : ¬ policyAllows P π .agent)
-      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, ec ++ [explainPolicy π P], P, π, .agent τ s pr⟩
+        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .agent τ s pr⟩
 
   -- L2: Eval family. Invokes a workflow value (vClos) extending the env
   -- with the parameter bindings `bs`. The rule takes `bs` as a witness
@@ -178,41 +174,40 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (_hbad   : ¬ ∃ bs : List (Name × Binding),
                       ∀ (x : Name) (b : Binding), (x, b) ∈ bs →
                         RtType ρ b.value b.ty)
-      (hbudget : (ec ++ [explainType (.vClos xs body) .tUnit]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType (.vClos xs body) .tUnit)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
-        ⟨ρ, ec ++ [explainType (.vClos xs body) .tUnit], P, π,
+        ⟨ρ, ec ++ [Event.error (explainType (.vClos xs body) .tUnit)], P, π,
          .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
 
   | evalHealPol {ρ ec P π e args}
       (_hdeny  : ¬ policyAllows P π .evalA)
-      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .evalE e args⟩
-        ⟨ρ, ec ++ [explainPolicy π P], P, π, .evalE e args⟩
+        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .evalE e args⟩
 
-  -- L2: Gen-Budget-Exhausted. When the err-context grows beyond the retry
-  -- budget, reduction stops at a terminal error marker, carrying the
-  -- accumulated explanations and the source label for diagnostics.
-  | genBudgetExhausted {ρ ec P π τ s ℓ}
-      (_hover : ec.length > retryBudget) :
+  -- L2: Gen-Budget-Exhausted. When the trailing error-run exceeds the
+  -- retry budget, reduction stops at a terminal error marker carrying
+  -- the full event log and the failing gen expression for blame.
+  | genBudgetExhausted {ρ ec P π τ s}
+      (_hover : ErrCtx.retries ec > retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec, P, π, .errTerm ec ℓ⟩
+        ⟨ρ, ec, P, π, .errTerm ec (.gen τ s none)⟩
 
   -- L3: Enforce-Heal. When `policyInstall` is undefined for the policy
   -- value bound to `x`, append the explanation to ε and rewrite the redex
-  -- back to a gen of Tpolicy using the prompt recorded in the provenance
-  -- of `x`.
+  -- back to a gen of Tpolicy using the implementation-supplied prompt.
   | enforceHeal {ρ ec P π x p b}
       (hb     : Env.lookup ρ x = some b)
       (hpol   : b.value = .vPol p)
       (hty    : b.ty = .tPolicy)
       (_hbad  : policyInstall P p = none)
-      (hbudget : (ec ++ [explainPolicy π P]).length ≤ retryBudget) :
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
       Step O
         ⟨ρ, ec, P, π, .enforce x⟩
-        ⟨ρ, ec ++ [explainPolicy π P], P, π, .gen .tPolicy (provPrompt ρ x) none⟩
+        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .gen .tPolicy (provPrompt ρ x) none⟩
 
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C

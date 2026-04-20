@@ -40,7 +40,7 @@ inductive GStep (O : Oracle) : Config → Config → Prop where
       (hrt   : RtType env' v τ)
       (hfr   : Env.fresh env' x)
       : GStep O ⟨ρ, ec, P, π, e'⟩
-          ⟨Env.extend env' x ⟨v, τ, none, .letBind⟩,
+          ⟨Env.extend env' x ⟨v, τ, .letBind⟩,
            err', pol', princ', suf⟩
 
 /-- Reflexive-transitive closure of `GStep`. -/

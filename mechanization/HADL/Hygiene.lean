@@ -49,7 +49,7 @@ def Ty.hygienic : Ty → Prop
 def Env.Hygienic (ρ : Env) : Prop :=
   ∀ {y τ'},
     Env.lookup ρ y
-      = some ⟨Value.vSchema τ', Ty.tSchema, none, Mutability.letBind⟩ →
+      = some ⟨Value.vSchema τ', Ty.tSchema, Mutability.letBind⟩ →
     τ'.hygienic
 
 namespace Env
@@ -74,7 +74,7 @@ theorem Hygienic.extend_nonschema
   rw [lookup_extend] at hlk
   by_cases hxy : x = y
   · rw [if_pos hxy] at hlk
-    have : b = ⟨Value.vSchema τ', .tSchema, none, .letBind⟩ :=
+    have : b = ⟨Value.vSchema τ', .tSchema, .letBind⟩ :=
       Option.some.inj hlk
     exact absurd (congrArg Binding.ty this) hb
   · rw [if_neg hxy] at hlk
@@ -84,13 +84,13 @@ theorem Hygienic.extend_nonschema
 theorem Hygienic.extend_schema
     {ρ : Env} {x : Name} {τ'' : Ty}
     (hρ  : ρ.Hygienic) (hτ'' : τ''.hygienic) :
-    (Env.extend ρ x ⟨Value.vSchema τ'', .tSchema, none, .letBind⟩).Hygienic := by
+    (Env.extend ρ x ⟨Value.vSchema τ'', .tSchema, .letBind⟩).Hygienic := by
   intro y τ' hlk
   rw [lookup_extend] at hlk
   by_cases hxy : x = y
   · rw [if_pos hxy] at hlk
-    have heq : (⟨Value.vSchema τ'', .tSchema, none, .letBind⟩ : Binding) =
-               ⟨Value.vSchema τ', .tSchema, none, .letBind⟩ :=
+    have heq : (⟨Value.vSchema τ'', .tSchema, .letBind⟩ : Binding) =
+               ⟨Value.vSchema τ', .tSchema, .letBind⟩ :=
       Option.some.inj hlk
     have hvv : Value.vSchema τ'' = Value.vSchema τ' :=
       congrArg Binding.value heq
@@ -124,7 +124,7 @@ theorem RtType.weaken_extend_reserved
       have hxy : x ≠ y := fun heq => hy_nr (heq ▸ hx)
       have hlk' :
           Env.lookup (Env.extend ρ x b) y =
-            some ⟨.vSchema τ', .tSchema, none, .letBind⟩ := by
+            some ⟨.vSchema τ', .tSchema, .letBind⟩ := by
         rw [Env.lookup_extend, if_neg hxy]; exact hlk
       have hτ' : τ'.hygienic := hρ hlk
       exact RtType.tVarResolve hlk' (ih hτ')

@@ -20,17 +20,6 @@ import HADL.Hygiene
 namespace HADL
 
 /--
-  The opaque `freshLabel` produces a string that belongs to the reserved
-  namespace (starts with `Extract.freshPrefix = "__ex_"`).  Combined with
-  `freshLabel_is_fresh`, this gives us that the label's string form is
-  both fresh in ρ and syntactically disjoint from any non-reserved source
-  name.  Declared as an axiom; consistent with implementations where
-  labels are generated from a counter prefixed with `"__ex_lbl"`.
--/
-axiom freshLabel_is_reserved (ρ : Env) (e : Expr) :
-    Name.IsRes (toString (freshLabel ρ e))
-
-/--
   **Extract-based gen progress.**  If `Extract` of an expression `e'`
   returns a `gen τ s none` head with fresh binder `x` and continuation
   `suf`, then under an eventually-truthful oracle at an authorized
@@ -44,11 +33,10 @@ axiom freshLabel_is_reserved (ρ : Env) (e : Expr) :
   No E[·] congruence rules are needed; the `Extract` defunctionalization
   of Phase A does the routing.
 
-  The hygiene hypotheses `hτ_hyg`, `hρ_hyg`, together with the freshness
-  hypotheses `hx_fresh`, `hx_ne_lbl`, close the two technical gaps that
-  the gen-case progress proof hits: weakening `RtType` across the
-  label-binding extension, and freshness of the extract binder `x` in
-  the extended env.
+  Only one freshness hypothesis is needed: that `x` is fresh in ρ.
+  Under the feedback-log model, `genSuccess` does not extend the env,
+  so the only binding introduced is the Extract binder `x` in
+  `GStep.run`, and no label-freshness disjointness is required.
 -/
 theorem T4_gStep_progress_gen
     {O : Oracle} {ρ : Env} {P : Policy} {π : Principal}
@@ -57,10 +45,7 @@ theorem T4_gStep_progress_gen
     (hauth : policyAllows P π .gen)
     (hext  : Extract e' = some (pre, x, suf))
     (hpre  : pre = .gen τ s none)
-    (hτ_hyg   : τ.hygienic)
-    (hρ_hyg   : ρ.Hygienic)
-    (hx_fresh : Env.fresh ρ x)
-    (hx_ne_lbl : x ≠ toString (freshLabel ρ (.gen τ s none))) :
+    (hx_fresh : Env.fresh ρ x) :
     ∃ (ec : ErrCtx) (C' : Config),
       GStep O ⟨ρ, ec, P, π, e'⟩ C' := by
   subst hpre
@@ -71,18 +56,10 @@ theorem T4_gStep_progress_gen
   refine ⟨ec', _, GStep.run (O := O) (ρ := ρ) (ec := ec') (P := P) (π := π)
             (e' := e') (x := x) (suf := suf)
             (pre := .gen τ s none)
-            (env' := Env.extend ρ (toString (freshLabel ρ (.gen τ s none)))
-                      ⟨v, τ, some (freshLabel ρ (.gen τ s none)), .letBind⟩)
-            (err' := []) (pol' := P) (princ' := π) (v := v) (τ := τ)
+            (env' := ρ)
+            (err' := ec' ++ [Event.success]) (pol' := P) (princ' := π)
+            (v := v) (τ := τ)
             (hext := hext)
-            (hpre := ?_) (hrt := ?_) (hfr := ?_)⟩
-  · exact hstep
-  · -- RtType weakening across the label binding.
-    exact RtType.weaken_extend_reserved hrt hτ_hyg hρ_hyg
-            (freshLabel_is_reserved ρ (.gen τ s none))
-  · -- Freshness: x ≠ toString ℓ and x fresh in ρ.
-    show x ∉ (Env.extend ρ _ _).dom
-    simp only [Env.extend, Env.dom, List.map, List.mem_cons, not_or]
-    exact ⟨fun h => hx_ne_lbl h, hx_fresh⟩
+            (hpre := hstep) (hrt := hrt) (hfr := hx_fresh)⟩
 
 end HADL

@@ -41,8 +41,13 @@
 \newcommand{\MErr}{\Sigma}
 \newcommand{\MPol}{\Pi}
 \newcommand{\MPrin}{\pi}
-\newcommand{\MBind}[5]{#1 \mapsto (#2,\,#3,\,#4,\,#5)}
+\newcommand{\MBind}[4]{#1 \mapsto (#2,\,#3,\,#4)}
 \newcommand{\MRetry}{N}
+
+%%%%%%%%%%%%% HADL formal model — event log (heal context)
+\newcommand{\ErrEv}[1]{\mathsf{err}(#1)}
+\newcommand{\SucEv}{\mathsf{succ}}
+\newcommand{\retries}[1]{\mathsf{retries}(#1)}
 
 %%%%%%%%%%%%% HADL formal model — types
 \newcommand{\Tunit}{\texttt{()}}

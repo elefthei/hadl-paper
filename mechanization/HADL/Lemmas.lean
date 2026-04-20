@@ -135,7 +135,7 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | forCons _ _         => exact fun _ hp => hp
   | seqStep             => exact fun _ hp => hp
   | jsStep _            => exact fun _ hp => hp
-  | genSuccess _ _ _ _ _ _ => exact fun _ hp => hp
+  | genSuccess _ _ _ _ => exact fun _ hp => hp
   | genHealType _ _ _   => exact fun _ hp => hp
   | genHealPol _ _      => exact fun _ hp => hp
   | enforceInstall _ _ _ hinst =>

@@ -45,38 +45,30 @@ def Oracle.EventuallyTruthful (O : Oracle) (N : Nat) : Prop :=
     ∃ (ec : ErrCtx), ec.length ≤ N ∧
       ∃ v, O s ec τ v ∧ RtType ρ v τ
 
-/--
-  The opaque `freshLabel` always produces a name fresh in the current
-  environment. Declared as an axiom; used only by T4.
--/
-axiom freshLabel_is_fresh (ρ : Env) (e : Expr) :
-    Env.fresh ρ (toString (freshLabel ρ e))
-
 /-! ### T4 Budget Progress -/
 
 /--
-  **Budget progress.** If the err-context of a gen-stuck config has
+  **Budget progress.** If the retries-metric of a gen-stuck config has
   exceeded the retry budget, `genBudgetExhausted` fires — deterministic
   fail-fast named in T4.
 -/
 theorem T4_budget_progress
     {O : Oracle} {ρ : Env} {ε : ErrCtx} {P : Policy} {π : Principal}
     {τ : Ty} {s : String}
-    (hover : ε.length > retryBudget) :
-    let ℓ := freshLabel ρ (.gen τ s none)
+    (hover : ErrCtx.retries ε > retryBudget) :
     Step O ⟨ρ, ε, P, π, .gen τ s none⟩
-         ⟨ρ, ε, P, π, .errTerm ε ℓ⟩ := by
+         ⟨ρ, ε, P, π, .errTerm ε (.gen τ s none)⟩ := by
   exact Step.genBudgetExhausted (O := O)
     (ρ := ρ) (ec := ε) (P := P) (π := π)
-    (τ := τ) (s := s) (ℓ := freshLabel ρ (.gen τ s none)) hover
+    (τ := τ) (s := s) hover
 
 /-! ### T4 Truthful Oracle ⇒ Gen-Success -/
 
 /--
   **Truthful oracle yields Gen-Success.** Under an eventually-truthful
   oracle and an authorized policy, there exist `ec` and `v` at which
-  `Gen-Success` fires from a gen-stuck config, flushing ε to `[]` and
-  binding the result value at a fresh label.
+  `Gen-Success` fires from a gen-stuck config, appending a `.success`
+  event to ε and inlining the materialized value.
 -/
 theorem T4_truthful_success
     {O : Oracle} {ρ : Env} {P : Policy} {π : Principal}
@@ -87,17 +79,13 @@ theorem T4_truthful_success
       ec.length ≤ retryBudget ∧
       O s ec τ v ∧
       RtType ρ v τ ∧
-      let ℓ := freshLabel ρ (.gen τ s none)
-      let ρ' := Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩
       Step O ⟨ρ, ec, P, π, .gen τ s none⟩
-           ⟨ρ', [], P, π, .valE v⟩ := by
+           ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩ := by
   obtain ⟨ec, hlen, v, hO, hrt⟩ := hET s ρ τ P π hauth
   refine ⟨ec, v, hlen, hO, hrt, ?_⟩
   exact Step.genSuccess (O := O)
     (ρ := ρ) (ec := ec) (P := P) (π := π)
     (τ := τ) (s := s) (v := v)
-    (ℓ := freshLabel ρ (.gen τ s none))
-    hauth hO hrt StType.valueWildcard rfl
-    (freshLabel_is_fresh ρ (.gen τ s none))
+    hauth hO hrt StType.valueWildcard
 
 end HADL

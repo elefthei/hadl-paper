@@ -1,4 +1,4 @@
--- Typed environment ρ: x ↦ (v, τ, prov, mut).
+-- Typed environment ρ: x ↦ (v, τ, mut).
 -- Represented as a list for simplicity; first match wins on lookup.
 
 import HADL.Syntax
@@ -8,7 +8,6 @@ namespace HADL
 structure Binding where
   value : Value
   ty    : Ty
-  prov  : Option Label
   mode  : Mutability
 
 abbrev Env := List (Name × Binding)
@@ -25,7 +24,7 @@ def lookup (ρ : Env) (x : Name) : Option Binding :=
 def extend (ρ : Env) (x : Name) (b : Binding) : Env := (x, b) :: ρ
 
 /-- Shadow-assign: push a new cell for `x` with an updated value, preserving
-    the old binding's static type, provenance, and mutability. If `x` has no
+    the old binding's static type and mutability. If `x` has no
     prior binding we shadow with the ambient defaults from `b`. -/
 def assign (ρ : Env) (x : Name) (v : Value) (fallback : Binding) : Env :=
   match ρ.lookup x with

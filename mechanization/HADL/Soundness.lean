@@ -12,7 +12,7 @@ import HADL.Lemmas
 namespace HADL
 
 /-- A config is an error config iff its expression is the terminal error marker. -/
-def Config.isErr (C : Config) : Prop := ∃ ec ℓ, C.expr = .errTerm ec ℓ
+def Config.isErr (C : Config) : Prop := ∃ ec e, C.expr = .errTerm ec e
 
 /--
   Helper: if every binding of ρ is runtime-typed, and we extend ρ with a
@@ -99,77 +99,70 @@ theorem T1_WF_preservation
     {O : Oracle} {C C' : Config}
     (hwf : C.WF) (hstep : Step O C C') (_hne : ¬ C'.isErr) :
     C'.WF := by
-  obtain ⟨hbinds, _hres, _hprov, hlen⟩ := hwf
+  obtain ⟨hbinds, _hres, hlen⟩ := hwf
   cases hstep with
   | var _ _ =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | letBind hrt hfr =>
-      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extend hbinds hfr hrt
   | assign hlk hvar hrt =>
-      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_assign hbinds hlk hvar hrt
   | ifTrue =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | ifFalse =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | whileUnfold =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | forNil =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | forCons hrt hfr =>
-      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extend hbinds hfr hrt
   | seqStep =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | jsStep _ =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
-  | genSuccess _ _ hrt hstage _ hfr =>
-      refine ⟨?_, ⟨_, hstage⟩, trivial, by simp [retryBudget]⟩
-      exact bindings_preserved_on_fresh_extend hbinds hfr hrt
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
+  | genSuccess _ _ _ hstage =>
+      exact ⟨hbinds, ⟨_, hstage⟩, by simp [retryBudget]⟩
   | genHealType _ _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | genHealPol _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | enforceInstall _ _ _ _ =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | askStep _ _ =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, by simp [retryBudget]⟩
   | sayStep =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | agentSuccess _ _ _ =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, by simp [retryBudget]⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, by simp [retryBudget]⟩
   | agentHealType _ _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | agentHealPol _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | evalSuccess _ _ hrt hfr =>
-      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, trivial, hlen⟩
+      refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extendAll _ _ hbinds hfr hrt
   | evalHealType _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | evalHealPol _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | genBudgetExhausted _ =>
       -- C' has expr = .errTerm, contradicting `¬ C'.isErr`.
       exact absurd ⟨_, _, rfl⟩ _hne
   | enforceHeal _ _ _ _ hbudget =>
-      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, trivial, hbudget⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
 
 /--
   **T2 — Staged Materialization Soundness.** Direct read-off of the
   `genSuccess` side condition `hstage`.
 -/
 theorem T2_staged_materialization
-    {ρ : Env} {τ : Ty} {v : Value} {ℓ : Label}
-    (hstage : StType
-                (Env.proj (Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩))
-                (.valE v)
-                τ) :
-    StType
-      (Env.proj (Env.extend ρ (toString ℓ) ⟨v, τ, some ℓ, .letBind⟩))
-      (.valE v)
-      τ := hstage
+    {ρ : Env} {τ : Ty} {v : Value}
+    (hstage : StType (Env.proj ρ) (.valE v) τ) :
+    StType (Env.proj ρ) (.valE v) τ := hstage
 
 /--
   **T3 — Policy Monotonicity.** Along any trace, the allow set can only
