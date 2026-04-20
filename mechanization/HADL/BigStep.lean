@@ -33,12 +33,16 @@ inductive GStep (O : Oracle) : Config → Config → Prop where
       (hnone : Extract C.expr = none)
       (hstep : Step O C C')
       : GStep O C C'
-  | run {ρ ec P π e' env' err' pol' princ' pre x suf v τ}
+  | run {ρ ec P π e' env' err' pol' princ' pre x suf v τ τ'}
       (hext  : Extract e' = some (pre, x, suf))
       (hpre  : Step O ⟨ρ, ec, P, π, pre⟩
                       ⟨env', err', pol', princ', .valE v⟩)
       (hrt   : RtType env' v τ)
       (hfr   : Env.fresh env' x)
+      (hrestage :
+        StType
+          (Env.proj (Env.extend env' x ⟨v, τ, .letBind⟩))
+          suf τ')
       : GStep O ⟨ρ, ec, P, π, e'⟩
           ⟨Env.extend env' x ⟨v, τ, .letBind⟩,
            err', pol', princ', suf⟩

@@ -58,8 +58,9 @@ theorem T4_gStep_progress_gen
             (pre := .gen τ s none)
             (env' := ρ)
             (err' := ec' ++ [Event.success]) (pol' := P) (princ' := π)
-            (v := v) (τ := τ)
+            (v := v) (τ := τ) (τ' := .tSchema)
             (hext := hext)
-            (hpre := hstep) (hrt := hrt) (hfr := hx_fresh)⟩
+            (hpre := hstep) (hrt := hrt) (hfr := hx_fresh)
+            (hrestage := StType.schemaWildcard)⟩
 
 end HADL

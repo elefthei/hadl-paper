@@ -16,6 +16,7 @@ def Extract.freshPrefix : String := "__ex_"
     continuation produced for that call. -/
 def Extract.freshGen   : Name := Extract.freshPrefix ++ "gen"
 def Extract.freshAgent : Name := Extract.freshPrefix ++ "ag"
+def Extract.freshAsk   : Name := Extract.freshPrefix ++ "ask"
 
 /--
   `Extract e = some (pre, x, suf)` means:
@@ -39,6 +40,8 @@ def Extract : Expr → Option (Expr × Name × Expr)
       some (.gen τ s π, Extract.freshGen, .var Extract.freshGen)
   | .agent τ s π =>
       some (.agent τ s π, Extract.freshAgent, .var Extract.freshAgent)
+  | .ask s =>
+      some (.ask s, Extract.freshAsk, .var Extract.freshAsk)
   | .letE m y τ e₁ e₂ =>
       (Extract e₁).map (fun p => (p.1, p.2.1, .letE m y τ p.2.2 e₂))
   | .assign y e₁ =>

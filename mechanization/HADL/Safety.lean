@@ -36,13 +36,14 @@ def Config.isGenStuck (C : Config) : Prop :=
 
 /--
   `O` is *eventually-truthful at budget `N`* when at every authorized
-  gen site, there exists an err-context of length ≤ N at which the
-  oracle returns a value well-typed at the requested type.
+  gen site, there exists an err-context whose *retry metric* is ≤ N at
+  which the oracle returns a value well-typed at the requested type.
+  This matches Def. 1 of the paper (retries, not total length).
 -/
 def Oracle.EventuallyTruthful (O : Oracle) (N : Nat) : Prop :=
   ∀ (s : String) (ρ : Env) (τ : Ty) (P : Policy) (π : Principal),
     policyAllows P π .gen →
-    ∃ (ec : ErrCtx), ec.length ≤ N ∧
+    ∃ (ec : ErrCtx), ErrCtx.retries ec ≤ N ∧
       ∃ v, O s ec τ v ∧ RtType ρ v τ
 
 /-! ### T4 Budget Progress -/
@@ -76,7 +77,7 @@ theorem T4_truthful_success
     (hET   : Oracle.EventuallyTruthful O retryBudget)
     (hauth : policyAllows P π .gen) :
     ∃ (ec : ErrCtx) (v : Value),
-      ec.length ≤ retryBudget ∧
+      ErrCtx.retries ec ≤ retryBudget ∧
       O s ec τ v ∧
       RtType ρ v τ ∧
       Step O ⟨ρ, ec, P, π, .gen τ s none⟩

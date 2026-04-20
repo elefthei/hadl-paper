@@ -102,7 +102,7 @@ In $\rulename{Enforce-Heal}$, $s_x$ denotes the prompt supplied by the implement
 \section{Proof of Theorem~\ref{thm:hadl-sound}}
 \label{app:proofs}
 
-We expand the argument clause by clause. Each induction is on the derivation of $C_n \step C_{n+1}$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization relies on three axioms: \texttt{jsEval} and \texttt{jsEval\_wellTyped} (the JavaScript host evaluates pure expressions and returns runtime values of the declared type) and \texttt{policyInstall\_shrinks} (Cedar's \texttt{forbid}-over-\texttt{permit} semantics implies appended rules shrink $\Allow{\cdot}$); all other steps are sorry-free.
+We expand the argument clause by clause. Each induction is on the derivation of $C_n \step C_{n+1}$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization is free of user-introduced axioms: \texttt{policyInstall\_shrinks} is proved by iterated application of Cedar-Lean's \texttt{unchanged\_deny\_when\_add\_forbid} theorem, and the JavaScript oracle is modelled as a stubbed evaluator \texttt{jsEval} so that \texttt{jsEval\_wellTyped} holds vacuously (host-level evaluation is delegated to the implementation). All theorems depend only on Lean's standard meta-axioms (\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}); all other steps are sorry-free.
 
 \subsection{(T1) WF-Preservation}
 

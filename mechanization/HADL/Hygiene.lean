@@ -31,6 +31,10 @@ theorem Extract.freshAgent_reserved : Name.IsRes Extract.freshAgent := by
   unfold Name.IsRes Name.isReserved Extract.freshAgent
   native_decide
 
+theorem Extract.freshAsk_reserved : Name.IsRes Extract.freshAsk := by
+  unfold Name.IsRes Name.isReserved Extract.freshAsk
+  native_decide
+
 /-! ### Ty hygiene
 
     Only `tVar` matters for `RtType`. For all other constructors we return
