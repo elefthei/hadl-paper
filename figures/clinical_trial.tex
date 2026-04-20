@@ -1,0 +1,29 @@
+\begin{figure}[H]
+\begin{lstlisting}[language=hadl,showstringspaces=false]
+@retries 3
+
+workflow clinical_trial() -> String {
+  let trial = ask "Describe the clinical trial"
+  let crf: Schema = gen "Generate a CRF schema for `trial`"
+  let policy: Policy = gen "Coordinators cannot see
+    unblinding data. Safety_board has full access."
+  enforce policy
+  let role = ask "Your role?"
+  let ids: array[String] = gen "List 3 patient IDs"
+  var total: Number = 0
+  for pid in ids {
+    let visit: crf = gen "Generate visit for `pid` in `trial`" as role
+    total = js total + 1
+    say "`visit.patient_id` recorded"
+  }
+  say "Collected `total` visits"
+  let sae = ask "Adverse event reported?"
+  if (sae == "yes") {
+    agent "Write an SAE narrative" as "coordinator"
+  }
+  agent "Summarize the `total` visits collected in `trial`." as role
+}
+\end{lstlisting}
+\caption{A clinical trial workflow illustrating gradual validation for both types and policies, with \texttt{@retries} activating provenance-driven self-healing.}
+\label{fig:clinical-trial}
+\end{figure}
