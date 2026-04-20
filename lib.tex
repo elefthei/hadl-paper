@@ -34,15 +34,16 @@
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
 \newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
 
 %%%%%%%%%%%%% HADL formal model — machine components
-\newcommand{\MConfig}[5]{\langle #1,\; #2,\; #3,\; #4,\; #5 \rangle}
-\newcommand{\MEnv}{\rho}
+% 3-tuple configuration ⟨Σ, Π, e⟩ (substitution-based core).
+\newcommand{\MConfig}[3]{\langle #1,\; #2,\; #3 \rangle}
 \newcommand{\MErr}{\Sigma}
 \newcommand{\MPol}{\Pi}
 \newcommand{\MPrin}{\pi}
-\newcommand{\MBind}[4]{#1 \mapsto (#2,\,#3,\,#4)}
 \newcommand{\MRetry}{N}
+\newcommand{\Inst}[2]{#1[#2/0]}
 
 %%%%%%%%%%%%% HADL formal model — event log (heal context)
 \newcommand{\ErrEv}[1]{\mathsf{err}(#1)}
@@ -61,30 +62,31 @@
 \newcommand{\Tarr}[1]{\texttt{array}[#1]}
 \newcommand{\Tref}[1]{#1}
 
-%%%%%%%%%%%%% HADL formal model — expressions
+%%%%%%%%%%%%% HADL formal model — expressions (de-Bruijn, substitution-based)
 \newcommand{\Ask}[1]{\texttt{ask}\;#1}
 \newcommand{\Say}[1]{\texttt{say}\;#1}
-\newcommand{\Gen}[2]{\texttt{gen}_{#1}\;#2}
-\newcommand{\GenAs}[3]{\texttt{gen}_{#1}\;#2\;\texttt{as}\;#3}
-\newcommand{\Agent}[1]{\texttt{agent}\;#1}
-\newcommand{\AgentAs}[2]{\texttt{agent}\;#1\;\texttt{as}\;#2}
-\newcommand{\Eval}[2]{\texttt{eval}\;#1(#2)}
+% gen carries its principal in-syntax: \Gen{τ}{s}{π}
+\newcommand{\Gen}[3]{\texttt{gen}_{#1}\;#2\;\texttt{as}\;#3}
+% agent carries its principal in-syntax: \Agent{s}{π}
+\newcommand{\Agent}[2]{\texttt{agent}\;#1\;\texttt{as}\;#2}
+\newcommand{\Eval}[2]{\texttt{eval}\;#1\;#2}
+\newcommand{\Clos}[2]{\lambda^{#1}.\,#2}
 \newcommand{\Enforce}[1]{\texttt{enforce}\;#1}
 \newcommand{\Js}[1]{\texttt{js}\;#1}
-\newcommand{\Let}[4]{\texttt{let}\;#1{:}#2 = #3\;\texttt{in}\;#4}
-\newcommand{\Var}[3]{\texttt{var}\;#1{:}#2 = #3}
-\newcommand{\Assign}[2]{#1 := #2}
+% De-Bruijn let: body has one binder — \Let{τ}{e_1}{e_2}.
+\newcommand{\Let}[3]{\texttt{let}_{#1}\;#2\;\texttt{in}\;#3}
 \newcommand{\Iff}[3]{\texttt{if}\;(#1)\;\{#2\}\;\texttt{else}\;\{#3\}}
 \newcommand{\Whl}[2]{\texttt{while}\;(#1)\;\{#2\}}
-\newcommand{\Forr}[3]{\texttt{for}\;#1\;\texttt{in}\;#2\;\{#3\}}
+% De-Bruijn for: body has one binder — \Forr{arr}{e}.
+\newcommand{\Forr}[2]{\texttt{for}\;#1\;\{#2\}}
 \newcommand{\Seq}[2]{#1\,;\,#2}
 
 %%%%%%%%%%%%% HADL formal model — judgments
-\newcommand{\RtType}[3]{#1 \vdash #2 : #3}
-\newcommand{\StType}[3]{#1 \vdash #2 : #3}
+% RtType is now envless: v : τ.
+\newcommand{\RtType}[2]{#1 : #2}
+\newcommand{\StType}[2]{\vdash #1 : #2}
 \newcommand{\PolOk}[3]{#1;\,#2 \vdash #3 : \mathsf{ok}}
 \newcommand{\WF}[1]{\vdash #1 : \mathsf{wf}}
-\newcommand{\Projenv}[1]{\Gamma(#1)}
 
 %%%%%%%%%%%%% HADL formal model — reduction and oracle
 \newcommand{\step}{\longrightarrow}
