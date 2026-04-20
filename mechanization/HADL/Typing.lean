@@ -56,4 +56,42 @@ theorem Store.set_WF {σ : Store} {x τ v}
   · simp [hy] at h; rcases h with ⟨rfl, rfl⟩; exact hv
   · simp [hy] at h; exact hσ y τ' v' h
 
+/-! ### Store read/write algebra.
+
+    These lemmas let future mutable-state proofs reason about
+    reads-after-writes (`get_set_eq` / `get_set_ne`) and
+    independent-cell commutativity (`set_set_eq` / `set_set_ne`).
+    `set_set_eq` / `set_set_ne` are NOT `@[simp]` because they could
+    loop on repeated writes to the same (or swapped) cells. -/
+
+@[simp]
+theorem Store.get_set_eq (σ : Store) (x : String) (τ : Ty) (v : Value) :
+    (σ.set x τ v) x = some (τ, v) := by
+  simp [Store.set]
+
+@[simp]
+theorem Store.get_set_ne {σ : Store} {x y : String} (τ : Ty) (v : Value)
+    (h : y ≠ x) : (σ.set x τ v) y = σ y := by
+  simp [Store.set, h]
+
+theorem Store.set_set_eq (σ : Store) (x : String) (τ₁ τ₂ : Ty) (v₁ v₂ : Value) :
+    (σ.set x τ₁ v₁).set x τ₂ v₂ = σ.set x τ₂ v₂ := by
+  funext y
+  by_cases hy : y = x
+  · simp [Store.set, hy]
+  · simp [Store.set, hy]
+
+theorem Store.set_set_ne {σ : Store} {x y : String} (τ₁ τ₂ : Ty) (v₁ v₂ : Value)
+    (h : x ≠ y) :
+    (σ.set x τ₁ v₁).set y τ₂ v₂ = (σ.set y τ₂ v₂).set x τ₁ v₁ := by
+  funext z
+  by_cases hzx : z = x
+  · subst hzx
+    have hzy : z ≠ y := h
+    simp [Store.set, hzy]
+  · by_cases hzy : z = y
+    · subst hzy
+      simp [Store.set, hzx]
+    · simp [Store.set, hzx, hzy]
+
 end HADL

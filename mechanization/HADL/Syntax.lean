@@ -50,33 +50,59 @@ inductive PolicyValue where
 -- `Expr` is expressions with `.val : Value → Expr` as the embedding.
 mutual
 inductive Value where
+  /-- Unit value (singleton inhabitant of `tUnit`). -/
   | unitV   : Value
+  /-- Boolean literal. -/
   | boolV   : Bool → Value
+  /-- Integer literal. -/
   | intV    : Int → Value
+  /-- String literal. -/
   | strV    : String → Value
+  /-- First-class type (reified schema). -/
   | schemaV : Ty → Value
+  /-- First-class policy value. -/
   | polV    : PolicyValue → Value
+  /-- Record value: list of (field-name, value) pairs. -/
   | recV    : List (String × Value) → Value
+  /-- Array value: homogeneous(ish) list of values. -/
   | arrV    : List Value → Value
+  /-- Closure with `n` de-Bruijn-bound parameters and expression body. -/
   | clos    : Nat → Expr → Value
 
 inductive Expr where
+  /-- Embedded value (the `Value ↪ Expr` injection). -/
   | val     : Value → Expr
+  /-- De-Bruijn variable reference. -/
   | var     : Nat → Expr
+  /-- Let-binding `let _ : τ = e1 in e2` (CBV, substitution-based). -/
   | letE    : Ty → Expr → Expr → Expr
+  /-- Conditional. -/
   | ifE     : Expr → Expr → Expr → Expr
+  /-- While-loop. -/
   | whileE  : Expr → Expr → Expr
+  /-- For-each: iterate `e2` (with one free var) over the array-valued `e1`. -/
   | forE    : Expr → Expr → Expr
+  /-- Sequencing. -/
   | seq     : Expr → Expr → Expr
+  /-- Oracle `ask`. -/
   | ask     : String → Expr
+  /-- Oracle `say`. -/
   | say     : String → Expr
+  /-- Oracle `gen` action. -/
   | gen     : Ty → String → Principal → Expr
+  /-- Oracle `agent` action. -/
   | agent   : String → Principal → Expr
+  /-- Closure application. -/
   | evalE   : Expr → List Expr → Expr
+  /-- Policy installation (`e` evaluates to a `polV`). -/
   | enforce : Expr → Expr
+  /-- Embedded JS expression (opaque, see JsAxioms). -/
   | js      : JsExpr → Expr
+  /-- Mutable variable declaration: `var x : τ := e1 ; e2`. -/
   | varDecl : String → Ty → Expr → Expr → Expr
+  /-- Mutable-variable assignment. -/
   | assign  : String → Expr → Expr
+  /-- Mutable-variable read. -/
   | varRead : String → Expr
 end
 
@@ -119,6 +145,14 @@ def Ren.liftN (r : Ren) : Nat → Ren
   | 0     => r
   | n + 1 => (Ren.liftN r n).lift
 
+/-! ### Renaming on `Value` and `Expr`.
+
+    Defined as a single mutual recursion because closures
+    `Value.clos n body` contain an `Expr` subterm. We register
+    `RenMap Expr` only — users rename on expressions; `Value.rmap` is
+    an internal helper that handles the closure-body traversal.
+    Registering `RenMap Value` would invite ambiguous elaboration since
+    almost every value pushes through identically. -/
 mutual
 
 def Value.rmap (r : Ren) : Value → Value
@@ -173,6 +207,14 @@ def Subst.liftN (σ : Subst Expr) : Nat → Subst Expr
   | 0     => σ
   | n + 1 => (Subst.liftN σ n).lift
 
+/-! ### Substitution on `Value` and `Expr`.
+
+    Defined as a single mutual recursion because closures
+    `Value.clos n body` contain an `Expr` subterm. We register
+    `SubstMap Expr Expr` only — users substitute on expressions;
+    `Value.smap` is an internal helper that handles the closure-body
+    traversal. Registering `SubstMap Value Expr` would invite ambiguous
+    elaboration since almost every value pushes through identically. -/
 mutual
 
 def Value.smap (σ : Subst Expr) : Value → Value
