@@ -1,8 +1,13 @@
--- Syntax of HADL: types, de-Bruijn expressions, values.
--- Matches the simplified §4 of the paper (substitution-based CBV).
+-- Syntax of HADL: types, values, de-Bruijn expressions.
+-- Two-sort presentation: `Value` is its own inductive; `Expr.val`
+-- embeds values into expressions.
 --
--- Values are the subset of `Expr` satisfying `isValue`.
--- Substitution and renaming are provided via the `lean-subst` library.
+-- Substitution and renaming on `Expr` are provided via the `lean-subst`
+-- library. `Value` has its own renaming/substitution helpers defined
+-- mutually with `Expr` (needed because `Value.clos` contains an `Expr`
+-- body with binders); we do not register a `RenMap Value` instance
+-- because closures are the only binder-introducing value constructor
+-- and renaming flows naturally through the mutual definition.
 
 import LeanSubst
 
@@ -41,19 +46,23 @@ instance : Nonempty JsExpr := JsExprNE.property
 inductive PolicyValue where
   | mk : String → PolicyValue
 
-/-- De-Bruijn expressions. Binders: `letE` (1 in body), `forE`
-    (1 in body), `clos n _` (n in body). -/
+-- Two-sort syntax: `Value` is the subset traditionally called values,
+-- `Expr` is expressions with `.val : Value → Expr` as the embedding.
+mutual
+inductive Value where
+  | unitV   : Value
+  | boolV   : Bool → Value
+  | intV    : Int → Value
+  | strV    : String → Value
+  | schemaV : Ty → Value
+  | polV    : PolicyValue → Value
+  | recV    : List (String × Value) → Value
+  | arrV    : List Value → Value
+  | clos    : Nat → Expr → Value
+
 inductive Expr where
+  | val     : Value → Expr
   | var     : Nat → Expr
-  | unit    : Expr
-  | litBool : Bool → Expr
-  | litInt  : Int → Expr
-  | litStr  : String → Expr
-  | schemaV : Ty → Expr
-  | polV    : PolicyValue → Expr
-  | recV    : List (String × Expr) → Expr
-  | arrV    : List Expr → Expr
-  | clos    : Nat → Expr → Expr
   | letE    : Ty → Expr → Expr → Expr
   | ifE     : Expr → Expr → Expr → Expr
   | whileE  : Expr → Expr → Expr
@@ -66,24 +75,13 @@ inductive Expr where
   | evalE   : Expr → List Expr → Expr
   | enforce : Expr → Expr
   | js      : JsExpr → Expr
-
--- Value predicate, as a `Bool` so it elaborates inside patterns.
-mutual
-def Expr.isValueB : Expr → Bool
-  | .unit | .litBool _ | .litInt _ | .litStr _
-  | .schemaV _ | .polV _ | .clos _ _  => true
-  | .recV xs => Expr.allValRec xs
-  | .arrV vs => Expr.allVal vs
-  | _ => false
-
-def Expr.allVal : List Expr → Bool
-  | List.nil       => true
-  | List.cons v vs => Expr.isValueB v && Expr.allVal vs
-
-def Expr.allValRec : List (String × Expr) → Bool
-  | List.nil             => true
-  | List.cons (_, e) xs  => Expr.isValueB e && Expr.allValRec xs
 end
+
+/-- Value predicate for expressions: `true` iff the expression is a
+    `val` wrapper around a `Value`. -/
+def Expr.isValueB : Expr → Bool
+  | .val _ => true
+  | _      => false
 
 abbrev Expr.isValue (e : Expr) : Prop := e.isValueB = true
 
@@ -120,17 +118,28 @@ def Ren.liftN (r : Ren) : Nat → Ren
 
 mutual
 
+def Value.rmap (r : Ren) : Value → Value
+  | .unitV      => .unitV
+  | .boolV b    => .boolV b
+  | .intV  i    => .intV  i
+  | .strV  s    => .strV  s
+  | .schemaV τ  => .schemaV τ
+  | .polV p     => .polV p
+  | .recV xs    => .recV (Value.rmapRec r xs)
+  | .arrV vs    => .arrV (Value.rmapList r vs)
+  | .clos n body => .clos n (Expr.rmap (Ren.liftN r n) body)
+
+def Value.rmapList (r : Ren) : List Value → List Value
+  | List.nil       => List.nil
+  | List.cons v vs => List.cons (Value.rmap r v) (Value.rmapList r vs)
+
+def Value.rmapRec (r : Ren) : List (String × Value) → List (String × Value)
+  | List.nil             => List.nil
+  | List.cons (k, v) xs  => List.cons (k, Value.rmap r v) (Value.rmapRec r xs)
+
 def Expr.rmap (r : Ren) : Expr → Expr
+  | .val v             => .val (Value.rmap r v)
   | .var x             => .var (r x)
-  | .unit              => .unit
-  | .litBool b         => .litBool b
-  | .litInt  i         => .litInt  i
-  | .litStr  s         => .litStr  s
-  | .schemaV τ         => .schemaV τ
-  | .polV p            => .polV p
-  | .recV xs           => .recV (Expr.rmapRec r xs)
-  | .arrV vs           => .arrV (Expr.rmapList r vs)
-  | .clos n body       => .clos n (Expr.rmap (Ren.liftN r n) body)
   | .letE τ e1 e2      => .letE τ (Expr.rmap r e1) (Expr.rmap r.lift e2)
   | .ifE e1 e2 e3      => .ifE (Expr.rmap r e1) (Expr.rmap r e2) (Expr.rmap r e3)
   | .whileE e1 e2      => .whileE (Expr.rmap r e1) (Expr.rmap r e2)
@@ -148,10 +157,6 @@ def Expr.rmapList (r : Ren) : List Expr → List Expr
   | List.nil       => List.nil
   | List.cons e es => List.cons (Expr.rmap r e) (Expr.rmapList r es)
 
-def Expr.rmapRec (r : Ren) : List (String × Expr) → List (String × Expr)
-  | List.nil              => List.nil
-  | List.cons (k, e) xs   => List.cons (k, Expr.rmap r e) (Expr.rmapRec r xs)
-
 end
 
 instance : RenMap Expr where
@@ -164,17 +169,28 @@ def Subst.liftN (σ : Subst Expr) : Nat → Subst Expr
 
 mutual
 
+def Value.smap (σ : Subst Expr) : Value → Value
+  | .unitV      => .unitV
+  | .boolV b    => .boolV b
+  | .intV  i    => .intV  i
+  | .strV  s    => .strV  s
+  | .schemaV τ  => .schemaV τ
+  | .polV p     => .polV p
+  | .recV xs    => .recV (Value.smapRec σ xs)
+  | .arrV vs    => .arrV (Value.smapList σ vs)
+  | .clos n body => .clos n (Expr.smap (Subst.liftN σ n) body)
+
+def Value.smapList (σ : Subst Expr) : List Value → List Value
+  | List.nil       => List.nil
+  | List.cons v vs => List.cons (Value.smap σ v) (Value.smapList σ vs)
+
+def Value.smapRec (σ : Subst Expr) : List (String × Value) → List (String × Value)
+  | List.nil             => List.nil
+  | List.cons (k, v) xs  => List.cons (k, Value.smap σ v) (Value.smapRec σ xs)
+
 def Expr.smap (σ : Subst Expr) : Expr → Expr
+  | .val v             => .val (Value.smap σ v)
   | .var x             => Expr.from_action (σ x)
-  | .unit              => .unit
-  | .litBool b         => .litBool b
-  | .litInt  i         => .litInt  i
-  | .litStr  s         => .litStr  s
-  | .schemaV τ         => .schemaV τ
-  | .polV p            => .polV p
-  | .recV xs           => .recV (Expr.smapRec σ xs)
-  | .arrV vs           => .arrV (Expr.smapList σ vs)
-  | .clos n body       => .clos n (Expr.smap (Subst.liftN σ n) body)
   | .letE τ e1 e2      => .letE τ (Expr.smap σ e1) (Expr.smap σ.lift e2)
   | .ifE e1 e2 e3      => .ifE (Expr.smap σ e1) (Expr.smap σ e2) (Expr.smap σ e3)
   | .whileE e1 e2      => .whileE (Expr.smap σ e1) (Expr.smap σ e2)
@@ -192,19 +208,16 @@ def Expr.smapList (σ : Subst Expr) : List Expr → List Expr
   | List.nil       => List.nil
   | List.cons e es => List.cons (Expr.smap σ e) (Expr.smapList σ es)
 
-def Expr.smapRec (σ : Subst Expr) : List (String × Expr) → List (String × Expr)
-  | List.nil             => List.nil
-  | List.cons (k, e) xs  => List.cons (k, Expr.smap σ e) (Expr.smapRec σ xs)
-
 end
 
 instance SubstMap_Expr : SubstMap Expr Expr where
   smap := Expr.smap
 
-/-- Instantiate the outermost binder: replace `var 0` by `v` and
-    decrement all other free variables by one. -/
-def Expr.instantiate (e : Expr) (v : Expr) : Expr :=
-  Expr.smap (Subst.Action.su v :: (+0 : Subst Expr)) e
+/-- Instantiate the outermost binder: replace `var 0` by `v` (a value,
+    wrapped into an expression via `.val`) and decrement all other free
+    variables by one. -/
+def Expr.instantiate (e : Expr) (v : Value) : Expr :=
+  Expr.smap (Subst.Action.su (.val v) :: (+0 : Subst Expr)) e
 
 /-! ## Heal context. -/
 

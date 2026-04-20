@@ -25,20 +25,20 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
     (h : Step O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   induction h with
-  | letBind _ _              => exact fun _ hp => hp
+  | letBind _               => exact fun _ hp => hp
   | ifTrue                   => exact fun _ hp => hp
   | ifFalse                  => exact fun _ hp => hp
   | whileUnfold              => exact fun _ hp => hp
   | forNil                   => exact fun _ hp => hp
-  | forCons _                => exact fun _ hp => hp
-  | seqStep _                => exact fun _ hp => hp
-  | jsStep _ _               => exact fun _ hp => hp
+  | forCons                  => exact fun _ hp => hp
+  | seqStep                  => exact fun _ hp => hp
+  | jsStep _                 => exact fun _ hp => hp
   | sayStep                  => exact fun _ hp => hp
-  | askStep _ _ _            => exact fun _ hp => hp
-  | oracleSuccess _ _ _ _    => exact fun _ hp => hp
+  | askStep _ _              => exact fun _ hp => hp
+  | oracleSuccess _ _ _      => exact fun _ hp => hp
   | oracleHealType _ _ _ _   => exact fun _ hp => hp
   | oracleHealPol _ _        => exact fun _ hp => hp
-  | evalSuccess _ _          => exact fun _ hp => hp
+  | evalSuccess _            => exact fun _ hp => hp
   | enforceInstall hinst     => exact policyInstall_shrinks _ _ _ hinst
   | letCong _ ih             => exact ih
   | ifCong _ ih              => exact ih

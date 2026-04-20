@@ -51,7 +51,7 @@ theorem T4_budget_no_heal
   case forCong => cases hE
   case enforceCong => cases hE
   case evalFunCong => cases hE
-  case oracleSuccess a _ _ _ _ =>
+  case oracleSuccess a _ _ _ =>
       cases a
       · exact ⟨_, rfl⟩
       · cases hE
@@ -79,8 +79,8 @@ theorem T4_truthful_success
     (hauth : policyAllows P π .gen)
     (htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
     ∃ ec C', Step O ⟨ec, P, .gen τ s π⟩ C' := by
-  obtain ⟨_σ, _hlen, v, _hv_mem, hvB, ⟨ec, hO⟩, hrt, _⟩ := htruth
-  refine ⟨ec, ⟨ec ++ [Event.success], P, v⟩, ?_⟩
-  exact Step.oracleSuccess (a := OAction.gen τ s π) hauth hO hvB hrt
+  obtain ⟨_σ, _hlen, v, _hv_mem, ⟨ec, hO⟩, hrt, _⟩ := htruth
+  refine ⟨ec, ⟨ec ++ [Event.success], P, .val v⟩, ?_⟩
+  exact Step.oracleSuccess (a := OAction.gen τ s π) hauth hO hrt
 
 end HADL

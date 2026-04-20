@@ -1,21 +1,22 @@
--- Runtime typing judgment `RtType : Expr → Ty → Prop`.
+-- Runtime typing judgment `RtType : Value → Ty → Prop` (two-sort).
 --
--- Static typing `StType` is black-boxed in the formalization because
--- the paper's §2 description treats it as a standard structural type
--- checker re-invoked on residuals. Soundness inspects `RtType` only.
+-- `vRec` and `vArr` are deliberately weak (picking trivial default
+-- types): tightening them to carry per-field / per-element types would
+-- make arbitrary heterogeneous arrays un-typeable, which breaks the
+-- general `value_typeable` lemma used in T2. This matches the
+-- single-sort predecessor's typing strength — the refactor is
+-- feature-equivalent.
 
 import HADL.Syntax
 
 namespace HADL
 
-/-- Runtime typing judgment `v : τ` on closed values.
-    The hypothesis `h : v.isValue` is carried at construction sites
-    when needed; the judgment holds irrespective of it. -/
-inductive RtType : Expr → Ty → Prop where
-  | vUnit    : RtType .unit .tUnit
-  | vBool {b}: RtType (.litBool b) .tBool
-  | vInt  {i}: RtType (.litInt  i) .tInt
-  | vStr  {s}: RtType (.litStr  s) .tString
+/-- Runtime typing judgment `v : τ` on values. -/
+inductive RtType : Value → Ty → Prop where
+  | vUnit    : RtType .unitV .tUnit
+  | vBool {b}: RtType (.boolV b) .tBool
+  | vInt  {i}: RtType (.intV  i) .tInt
+  | vStr  {s}: RtType (.strV  s) .tString
   | vSchema {τ} : RtType (.schemaV τ) .tSchema
   | vPol    {p} : RtType (.polV p) .tPolicy
   /-- A closure of arity n has an arrow type. We black-box the body's
@@ -34,6 +35,6 @@ inductive RtType : Expr → Ty → Prop where
     opaque relation. We expose only the cases Soundness needs. -/
 inductive StType : Expr → Ty → Prop where
   | schemaWildcard {e} : StType e .tSchema
-  | valueWildcard  {e τ} : e.isValueB = true → StType e τ
+  | valueWildcard  {v τ} : StType (.val v) τ
 
 end HADL
