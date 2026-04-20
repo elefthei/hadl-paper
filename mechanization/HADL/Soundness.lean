@@ -84,23 +84,8 @@ theorem T2_staged_materialization
     ∃ v, e' = .val v ∧ ∃ τ, RtType v τ := by
   intro _hs hv
   cases e' with
-  | val v       => exact ⟨v, rfl, value_typeable v⟩
-  | var _       => simp [Expr.isValueB] at hv
-  | letE _ _ _  => simp [Expr.isValueB] at hv
-  | ifE _ _ _   => simp [Expr.isValueB] at hv
-  | whileE _ _  => simp [Expr.isValueB] at hv
-  | forE _ _    => simp [Expr.isValueB] at hv
-  | seq _ _     => simp [Expr.isValueB] at hv
-  | ask _       => simp [Expr.isValueB] at hv
-  | say _       => simp [Expr.isValueB] at hv
-  | gen _ _ _   => simp [Expr.isValueB] at hv
-  | agent _ _   => simp [Expr.isValueB] at hv
-  | evalE _ _   => simp [Expr.isValueB] at hv
-  | enforce _   => simp [Expr.isValueB] at hv
-  | js _        => simp [Expr.isValueB] at hv
-  | varDecl _ _ _ _ => simp [Expr.isValueB] at hv
-  | assign _ _  => simp [Expr.isValueB] at hv
-  | varRead _   => simp [Expr.isValueB] at hv
+  | val v => exact ⟨v, rfl, value_typeable v⟩
+  | _ => simp [Expr.isValueB] at hv
 
 /-- **T3 (Policy Monotonicity).** Step only installs forbid policies, so
     the allow-set shrinks. -/
@@ -109,20 +94,6 @@ theorem T3_policy_monotonicity
     Step O C C' → policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   intro hs
   induction hs with
-  | letBind _ => exact Set.Subset.rfl
-  | ifTrue => exact Set.Subset.rfl
-  | ifFalse => exact Set.Subset.rfl
-  | whileUnfold => exact Set.Subset.rfl
-  | forNil => exact Set.Subset.rfl
-  | forCons => exact Set.Subset.rfl
-  | seqStep => exact Set.Subset.rfl
-  | jsStep _ => exact Set.Subset.rfl
-  | sayStep => exact Set.Subset.rfl
-  | askStep _ _ => exact Set.Subset.rfl
-  | oracleSuccess _ _ _ => exact Set.Subset.rfl
-  | oracleHealType _ _ _ _ => exact Set.Subset.rfl
-  | oracleHealPol _ _ => exact Set.Subset.rfl
-  | evalSuccess _ => exact Set.Subset.rfl
   | enforceInstall hinst => exact policyInstall_shrinks _ _ _ hinst
   | letCong _ ih => exact ih
   | ifCong _ ih => exact ih
@@ -131,9 +102,7 @@ theorem T3_policy_monotonicity
   | enforceCong _ ih => exact ih
   | evalFunCong _ ih => exact ih
   | varDeclEval _ ih => exact ih
-  | varDeclBind _ => exact Set.Subset.rfl
   | assignEval _ ih => exact ih
-  | assignWrite _ _ => exact Set.Subset.rfl
-  | varReadStep _ => exact Set.Subset.rfl
+  | _ => exact Set.Subset.rfl
 
 end HADL

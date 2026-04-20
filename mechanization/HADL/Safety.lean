@@ -32,30 +32,7 @@ theorem T4_budget_no_heal
           ∃ v, C' = ⟨ec ++ [Event.success], P, σ, v⟩ := by
   intro C' h
   generalize hE : (Expr.gen τ s π : Expr) = eG at h
-  cases h
-  case letBind => cases hE
-  case ifTrue => cases hE
-  case ifFalse => cases hE
-  case whileUnfold => cases hE
-  case forNil => cases hE
-  case forCons => cases hE
-  case seqStep => cases hE
-  case jsStep => cases hE
-  case sayStep => cases hE
-  case askStep => cases hE
-  case evalSuccess => cases hE
-  case enforceInstall => cases hE
-  case letCong => cases hE
-  case ifCong => cases hE
-  case seqCong => cases hE
-  case forCong => cases hE
-  case enforceCong => cases hE
-  case evalFunCong => cases hE
-  case varDeclEval => cases hE
-  case varDeclBind => cases hE
-  case assignEval => cases hE
-  case assignWrite => cases hE
-  case varReadStep => cases hE
+  cases h <;> (try (cases hE; done))
   case oracleSuccess a _ _ _ =>
       cases a
       · exact ⟨_, rfl⟩
