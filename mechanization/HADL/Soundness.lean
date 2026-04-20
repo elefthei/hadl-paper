@@ -130,9 +130,9 @@ theorem T1_WF_preservation
   | jsStep _ =>
       obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
-  | genSuccess _ _ _ hstage =>
+  | genSuccess _ _ _ =>
       obtain ⟨hbinds, _, _⟩ := hwf
-      exact ⟨hbinds, ⟨_, hstage⟩, by simp [retryBudget]⟩
+      exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, by simp [retryBudget]⟩
   | genHealType _ _ hbudget =>
       obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
@@ -202,13 +202,21 @@ theorem T1_WF_preservation
       exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
 
 /--
-  **T2 — Staged Materialization Soundness.** Direct read-off of the
-  `genSuccess` side condition `hstage`.
+  **T1 (b) — Materialized-value runtime typing.**  Any `Step.genSuccess`
+  step from a gen head to a value produces `v : τ` at runtime.  This is a
+  direct read-off of the rule's `hrt` premise and absorbs the old
+  standalone T2 "Staged Materialization Soundness" clause into Thm 1 of
+  the paper.
 -/
-theorem T2_staged_materialization
-    {ρ : Env} {τ : Ty} {v : Value}
-    (hstage : StType (Env.proj ρ) (.valE v) τ) :
-    StType (Env.proj ρ) (.valE v) τ := hstage
+theorem T1_materialize_RtType
+    {O : Oracle} {ρ : Env} {ec ec' : ErrCtx} {P P' : Policy} {π π' : Principal}
+    {τ : Ty} {s : String} {v : Value}
+    (h : Step O
+           ⟨ρ, ec, P, π, .gen τ s none⟩
+           ⟨ρ, ec', P', π', .valE v⟩) :
+    RtType ρ v τ := by
+  cases h with
+  | genSuccess _ _ hrt => exact hrt
 
 /--
   **T3 — Policy Monotonicity.** Along any trace, the allow set can only

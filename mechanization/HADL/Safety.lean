@@ -88,6 +88,6 @@ theorem T4_truthful_success
   exact Step.genSuccess (O := O)
     (ρ := ρ) (ec := ec) (P := P) (π := π)
     (τ := τ) (s := s) (v := v)
-    hauth hO hrt StType.valueWildcard
+    hauth hO hrt
 
 end HADL

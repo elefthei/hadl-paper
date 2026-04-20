@@ -88,8 +88,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   | genSuccess {ρ ec P π τ s v}
       (hauth  : policyAllows P π .gen)
       (horacle : O s ec τ v)
-      (hrt    : RtType ρ v τ)
-      (hstage : StType (Env.proj ρ) (.valE v) τ) :
+      (hrt    : RtType ρ v τ) :
       Step O
         ⟨ρ, ec, P, π, .gen τ s none⟩
         ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
