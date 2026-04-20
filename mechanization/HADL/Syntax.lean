@@ -75,6 +75,9 @@ inductive Expr where
   | evalE   : Expr → List Expr → Expr
   | enforce : Expr → Expr
   | js      : JsExpr → Expr
+  | varDecl : String → Ty → Expr → Expr → Expr
+  | assign  : String → Expr → Expr
+  | varRead : String → Expr
 end
 
 /-- Value predicate for expressions: `true` iff the expression is a
@@ -152,6 +155,9 @@ def Expr.rmap (r : Ren) : Expr → Expr
   | .evalE f args      => .evalE (Expr.rmap r f) (Expr.rmapList r args)
   | .enforce e         => .enforce (Expr.rmap r e)
   | .js je             => .js je
+  | .varDecl x τ e1 e2 => .varDecl x τ (Expr.rmap r e1) (Expr.rmap r e2)
+  | .assign x e        => .assign x (Expr.rmap r e)
+  | .varRead x         => .varRead x
 
 def Expr.rmapList (r : Ren) : List Expr → List Expr
   | List.nil       => List.nil
@@ -203,6 +209,9 @@ def Expr.smap (σ : Subst Expr) : Expr → Expr
   | .evalE f args      => .evalE (Expr.smap σ f) (Expr.smapList σ args)
   | .enforce e         => .enforce (Expr.smap σ e)
   | .js je             => .js je
+  | .varDecl x τ e1 e2 => .varDecl x τ (Expr.smap σ e1) (Expr.smap σ e2)
+  | .assign x e        => .assign x (Expr.smap σ e)
+  | .varRead x         => .varRead x
 
 def Expr.smapList (σ : Subst Expr) : List Expr → List Expr
   | List.nil       => List.nil
@@ -240,5 +249,21 @@ def ErrCtx.retries (ec : ErrCtx) : Nat :=
   unfold ErrCtx.retries
   rw [List.foldl_append]
   rfl
+
+/-! ## Mutable-state store.
+
+    Textbook total-function finite map from variable names to
+    `(declared type, current value)` pairs.  Mutable state is a
+    *separate surface* from substitution-based `letE`/de-Bruijn
+    `var`; the two do not interact. -/
+
+def Store : Type := String → Option (Ty × Value)
+
+def Store.empty : Store := fun _ => none
+
+def Store.get (σ : Store) (x : String) : Option (Ty × Value) := σ x
+
+def Store.set (σ : Store) (x : String) (τ : Ty) (v : Value) : Store :=
+  fun y => if y = x then some (τ, v) else σ y
 
 end HADL

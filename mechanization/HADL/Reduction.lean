@@ -1,5 +1,5 @@
--- Small-step reduction over 3-tuple configurations, substitution-based CBV.
--- Two-sort variant: values have their own type; value positions use `.val v`.
+-- Small-step reduction over 4-tuple configurations, substitution-based CBV.
+-- Two-sort values + mutable-state store.
 
 import HADL.Syntax
 import HADL.Typing
@@ -44,116 +44,138 @@ opaque explainPolicy : OAction → Policy → String
 /--
   Small-step relation `C ⟶ C'`, parameterized by an oracle `O`.
 
-  Substitution-based CBV over the two-sort syntax: `letE` reduces by
-  instantiating the body with a `Value`; `forE` reduces by substituting
-  the head element and recursing on the tail.
-
-  The three oracle rules (success / type-heal / policy-heal) are unified
-  across gen and agent via the `OAction` tag.
+  4-tuple configs carry a mutable-state store `σ`; all existing rules
+  thread `σ` unchanged. The three mutable-state constructors
+  (`varDecl` / `assign` / `varRead`) add five new rules at the bottom.
 -/
 inductive Step (O : Oracle) : Config → Config → Prop where
 
   -- Pure core.
 
-  | letBind {ec P τ v e}
+  | letBind {ec P σ τ v e}
       (hrt : RtType v τ) :
-      Step O ⟨ec, P, .letE τ (.val v) e⟩ ⟨ec, P, e.instantiate v⟩
+      Step O ⟨ec, P, σ, .letE τ (.val v) e⟩ ⟨ec, P, σ, e.instantiate v⟩
 
-  | ifTrue {ec P e₁ e₂} :
-      Step O ⟨ec, P, .ifE (.val (.boolV true)) e₁ e₂⟩ ⟨ec, P, e₁⟩
+  | ifTrue {ec P σ e₁ e₂} :
+      Step O ⟨ec, P, σ, .ifE (.val (.boolV true)) e₁ e₂⟩ ⟨ec, P, σ, e₁⟩
 
-  | ifFalse {ec P e₁ e₂} :
-      Step O ⟨ec, P, .ifE (.val (.boolV false)) e₁ e₂⟩ ⟨ec, P, e₂⟩
+  | ifFalse {ec P σ e₁ e₂} :
+      Step O ⟨ec, P, σ, .ifE (.val (.boolV false)) e₁ e₂⟩ ⟨ec, P, σ, e₂⟩
 
-  | whileUnfold {ec P e e'} :
-      Step O ⟨ec, P, .whileE e e'⟩
-             ⟨ec, P, .ifE e (.seq e' (.whileE e e')) (.val .unitV)⟩
+  | whileUnfold {ec P σ e e'} :
+      Step O ⟨ec, P, σ, .whileE e e'⟩
+             ⟨ec, P, σ, .ifE e (.seq e' (.whileE e e')) (.val .unitV)⟩
 
-  | forNil {ec P e} :
-      Step O ⟨ec, P, .forE (.val (.arrV [])) e⟩ ⟨ec, P, .val .unitV⟩
+  | forNil {ec P σ e} :
+      Step O ⟨ec, P, σ, .forE (.val (.arrV [])) e⟩ ⟨ec, P, σ, .val .unitV⟩
 
-  | forCons {ec P v vs e} :
-      Step O ⟨ec, P, .forE (.val (.arrV (v :: vs))) e⟩
-             ⟨ec, P, .seq (e.instantiate v) (.forE (.val (.arrV vs)) e)⟩
+  | forCons {ec P σ v vs e} :
+      Step O ⟨ec, P, σ, .forE (.val (.arrV (v :: vs))) e⟩
+             ⟨ec, P, σ, .seq (e.instantiate v) (.forE (.val (.arrV vs)) e)⟩
 
-  | seqStep {ec P v e} :
-      Step O ⟨ec, P, .seq (.val v) e⟩ ⟨ec, P, e⟩
+  | seqStep {ec P σ v e} :
+      Step O ⟨ec, P, σ, .seq (.val v) e⟩ ⟨ec, P, σ, e⟩
 
-  | jsStep {ec P je v}
+  | jsStep {ec P σ je v}
       (h : jsEval je = some v) :
-      Step O ⟨ec, P, .js je⟩ ⟨ec, P, .val v⟩
+      Step O ⟨ec, P, σ, .js je⟩ ⟨ec, P, σ, .val v⟩
 
-  | sayStep {ec P s} :
-      Step O ⟨ec, P, .say s⟩ ⟨ec, P, .val .unitV⟩
+  | sayStep {ec P σ s} :
+      Step O ⟨ec, P, σ, .say s⟩ ⟨ec, P, σ, .val .unitV⟩
 
-  | askStep {ec P s v}
+  | askStep {ec P σ s v}
       (horacle : O s ec .tString v)
       (hrt : RtType v .tString) :
-      Step O ⟨ec, P, .ask s⟩ ⟨ec ++ [Event.success], P, .val v⟩
+      Step O ⟨ec, P, σ, .ask s⟩ ⟨ec ++ [Event.success], P, σ, .val v⟩
 
   -- Unified oracle rules (gen / agent).
 
-  | oracleSuccess {ec P v} {a : OAction}
+  | oracleSuccess {ec P σ v} {a : OAction}
       (hauth   : policyAllows P a.princ a.effect)
       (horacle : O a.stmt ec a.ty v)
       (hrt     : RtType v a.ty) :
-      Step O ⟨ec, P, a.toExpr⟩ ⟨ec ++ [Event.success], P, .val v⟩
+      Step O ⟨ec, P, σ, a.toExpr⟩ ⟨ec ++ [Event.success], P, σ, .val v⟩
 
-  | oracleHealType {ec P v} {a : OAction}
+  | oracleHealType {ec P σ v} {a : OAction}
       (hauth   : policyAllows P a.princ a.effect)
       (horacle : O a.stmt ec a.ty v)
       (hbad    : ¬ RtType v a.ty)
       (hbudget : ErrCtx.retries (ec ++ [Event.error (explain a v)]) ≤ retryBudget) :
-      Step O ⟨ec, P, a.toExpr⟩
-             ⟨ec ++ [Event.error (explain a v)], P, a.toExpr⟩
+      Step O ⟨ec, P, σ, a.toExpr⟩
+             ⟨ec ++ [Event.error (explain a v)], P, σ, a.toExpr⟩
 
-  | oracleHealPol {ec P} {a : OAction}
+  | oracleHealPol {ec P σ} {a : OAction}
       (hdeny   : ¬ policyAllows P a.princ a.effect)
       (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy a P)]) ≤ retryBudget) :
-      Step O ⟨ec, P, a.toExpr⟩
-             ⟨ec ++ [Event.error (explainPolicy a P)], P, a.toExpr⟩
+      Step O ⟨ec, P, σ, a.toExpr⟩
+             ⟨ec ++ [Event.error (explainPolicy a P)], P, σ, a.toExpr⟩
 
-  -- Eval: closure application. `clos n body` applied to n value args.
-  -- Arguments appear in the source Expr position wrapped in `.val`.
+  -- Eval: closure application.
 
-  | evalSuccess {ec P n body} {vs : List Value}
+  | evalSuccess {ec P σ n body} {vs : List Value}
       (_hlen : vs.length = n) :
-      Step O ⟨ec, P, .evalE (.val (.clos n body)) (vs.map Expr.val)⟩
-             ⟨ec, P, Expr.smap
-                (vs.foldr (fun v σ => Subst.Action.su (.val v) :: σ) (+0 : Subst Expr))
+      Step O ⟨ec, P, σ, .evalE (.val (.clos n body)) (vs.map Expr.val)⟩
+             ⟨ec, P, σ, Expr.smap
+                (vs.foldr (fun v s => Subst.Action.su (.val v) :: s) (+0 : Subst Expr))
                 body⟩
 
   -- Enforce.
 
-  | enforceInstall {ec P P' p}
+  | enforceInstall {ec P σ P' p}
       (hinst : policyInstall P p = some P') :
-      Step O ⟨ec, P, .enforce (.val (.polV p))⟩ ⟨ec, P', .val .unitV⟩
+      Step O ⟨ec, P, σ, .enforce (.val (.polV p))⟩ ⟨ec, P', σ, .val .unitV⟩
 
-  -- CBV congruence. Reduces leftmost redex.
+  -- CBV congruence.
 
-  | letCong {ec ec' P P' τ e₁ e₁' e₂}
-      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
-      Step O ⟨ec, P, .letE τ e₁ e₂⟩ ⟨ec', P', .letE τ e₁' e₂⟩
+  | letCong {ec ec' P P' σ σ' τ e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
+      Step O ⟨ec, P, σ, .letE τ e₁ e₂⟩ ⟨ec', P', σ', .letE τ e₁' e₂⟩
 
-  | ifCong {ec ec' P P' e₁ e₁' e₂ e₃}
-      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
-      Step O ⟨ec, P, .ifE e₁ e₂ e₃⟩ ⟨ec', P', .ifE e₁' e₂ e₃⟩
+  | ifCong {ec ec' P P' σ σ' e₁ e₁' e₂ e₃}
+      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
+      Step O ⟨ec, P, σ, .ifE e₁ e₂ e₃⟩ ⟨ec', P', σ', .ifE e₁' e₂ e₃⟩
 
-  | seqCong {ec ec' P P' e₁ e₁' e₂}
-      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
-      Step O ⟨ec, P, .seq e₁ e₂⟩ ⟨ec', P', .seq e₁' e₂⟩
+  | seqCong {ec ec' P P' σ σ' e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
+      Step O ⟨ec, P, σ, .seq e₁ e₂⟩ ⟨ec', P', σ', .seq e₁' e₂⟩
 
-  | forCong {ec ec' P P' e₁ e₁' e₂}
-      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
-      Step O ⟨ec, P, .forE e₁ e₂⟩ ⟨ec', P', .forE e₁' e₂⟩
+  | forCong {ec ec' P P' σ σ' e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
+      Step O ⟨ec, P, σ, .forE e₁ e₂⟩ ⟨ec', P', σ', .forE e₁' e₂⟩
 
-  | enforceCong {ec ec' P P' e e'}
-      (h : Step O ⟨ec, P, e⟩ ⟨ec', P', e'⟩) :
-      Step O ⟨ec, P, .enforce e⟩ ⟨ec', P', .enforce e'⟩
+  | enforceCong {ec ec' P P' σ σ' e e'}
+      (h : Step O ⟨ec, P, σ, e⟩ ⟨ec', P', σ', e'⟩) :
+      Step O ⟨ec, P, σ, .enforce e⟩ ⟨ec', P', σ', .enforce e'⟩
 
-  | evalFunCong {ec ec' P P' f f' args}
-      (h : Step O ⟨ec, P, f⟩ ⟨ec', P', f'⟩) :
-      Step O ⟨ec, P, .evalE f args⟩ ⟨ec', P', .evalE f' args⟩
+  | evalFunCong {ec ec' P P' σ σ' f f' args}
+      (h : Step O ⟨ec, P, σ, f⟩ ⟨ec', P', σ', f'⟩) :
+      Step O ⟨ec, P, σ, .evalE f args⟩ ⟨ec', P', σ', .evalE f' args⟩
+
+  -- Mutable state.
+
+  | varDeclEval {ec ec' P P' σ σ' x τ e1 e1' e2}
+      (h : Step O ⟨ec, P, σ, e1⟩ ⟨ec', P', σ', e1'⟩) :
+      Step O ⟨ec, P, σ, .varDecl x τ e1 e2⟩
+             ⟨ec', P', σ', .varDecl x τ e1' e2⟩
+
+  | varDeclBind {ec P σ x τ v e2}
+      (hrt : RtType v τ) :
+      Step O ⟨ec, P, σ, .varDecl x τ (.val v) e2⟩
+             ⟨ec, P, σ.set x τ v, e2⟩
+
+  | assignEval {ec ec' P P' σ σ' x e e'}
+      (h : Step O ⟨ec, P, σ, e⟩ ⟨ec', P', σ', e'⟩) :
+      Step O ⟨ec, P, σ, .assign x e⟩ ⟨ec', P', σ', .assign x e'⟩
+
+  | assignWrite {ec P σ x v τ vOld}
+      (hbound : σ x = some (τ, vOld))
+      (hrt : RtType v τ) :
+      Step O ⟨ec, P, σ, .assign x (.val v)⟩
+             ⟨ec, P, σ.set x τ v, .val .unitV⟩
+
+  | varReadStep {ec P σ x τ v}
+      (hbound : σ x = some (τ, v)) :
+      Step O ⟨ec, P, σ, .varRead x⟩ ⟨ec, P, σ, .val v⟩
 
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C

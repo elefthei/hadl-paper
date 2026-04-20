@@ -36,5 +36,24 @@ inductive RtType : Value → Ty → Prop where
 inductive StType : Expr → Ty → Prop where
   | schemaWildcard {e} : StType e .tSchema
   | valueWildcard  {v τ} : StType (.val v) τ
+  | varDecl {x τ e1 e2 τ2} :
+      StType e1 τ → StType e2 τ2 → StType (.varDecl x τ e1 e2) τ2
+  | assign {x e τ} : StType e τ → StType (.assign x e) .tUnit
+  | varRead {x τ} : StType (.varRead x) τ
+
+/-- Store well-formedness: every cell's value has its declared type. -/
+def Store.WF (σ : Store) : Prop :=
+  ∀ x τ v, σ x = some (τ, v) → RtType v τ
+
+theorem Store.empty_WF : Store.empty.WF := by
+  intro _ _ _ h; simp [Store.empty] at h
+
+theorem Store.set_WF {σ : Store} {x τ v}
+    (hσ : σ.WF) (hv : RtType v τ) : (σ.set x τ v).WF := by
+  intro y τ' v' h
+  unfold Store.set at h
+  by_cases hy : y = x
+  · simp [hy] at h; rcases h with ⟨rfl, rfl⟩; exact hv
+  · simp [hy] at h; exact hσ y τ' v' h
 
 end HADL

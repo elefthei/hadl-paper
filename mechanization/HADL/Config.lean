@@ -1,24 +1,27 @@
 -- Machine configuration + well-formedness predicate.
 --
--- The substitution-based core uses a 3-tuple configuration. The
--- current principal π lives inside `gen`/`agent`/`evalE` syntax.
+-- 4-tuple configuration ⟨Σ, Π, σ, e⟩ with a mutable-state store σ.
+-- The current principal π lives inside `gen`/`agent`/`evalE` syntax.
 
 import HADL.Syntax
+import HADL.Typing
 import HADL.Policy
 
 namespace HADL
 
-/-- Three-tuple configuration ⟨Σ, Π, e⟩. -/
+/-- Four-tuple configuration. -/
 structure Config where
-  err       : ErrCtx
-  pol       : Policy
-  expr      : Expr
+  err   : ErrCtx
+  pol   : Policy
+  store : Store
+  expr  : Expr
 
 /-- Retry budget. -/
 def retryBudget : Nat := 3
 
-/-- Configuration well-formedness: one clause — retry budget bounded. -/
+/-- Configuration well-formedness: retry budget bounded AND store
+    well-typed. -/
 def Config.WF (C : Config) : Prop :=
-  ErrCtx.retries C.err ≤ retryBudget
+  ErrCtx.retries C.err ≤ retryBudget ∧ C.store.WF
 
 end HADL

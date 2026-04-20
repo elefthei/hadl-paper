@@ -46,6 +46,11 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | forCong _ ih             => exact ih
   | enforceCong _ ih         => exact ih
   | evalFunCong _ ih         => exact ih
+  | varDeclEval _ ih         => exact ih
+  | varDeclBind _            => exact fun _ hp => hp
+  | assignEval _ ih          => exact ih
+  | assignWrite _ _          => exact fun _ hp => hp
+  | varReadStep _            => exact fun _ hp => hp
 
 /-- Multi-step reduction can only shrink (or preserve) the allow set. -/
 theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}

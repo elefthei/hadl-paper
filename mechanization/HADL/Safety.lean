@@ -26,10 +26,10 @@ namespace HADL
     (`¬ ∃ C', Step …`) is false on the new semantics (a truthful oracle can
     always drive `oracleSuccess`). -/
 theorem T4_budget_no_heal
-    (O : Oracle) (ec : ErrCtx) (P : Policy) (τ : Ty) (s : String) (π : Principal)
+    (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (τ : Ty) (s : String) (π : Principal)
     (hover : ErrCtx.retries ec > retryBudget) :
-    ∀ C', Step O ⟨ec, P, .gen τ s π⟩ C' →
-          ∃ v, C' = ⟨ec ++ [Event.success], P, v⟩ := by
+    ∀ C', Step O ⟨ec, P, σ, .gen τ s π⟩ C' →
+          ∃ v, C' = ⟨ec ++ [Event.success], P, σ, v⟩ := by
   intro C' h
   generalize hE : (Expr.gen τ s π : Expr) = eG at h
   cases h
@@ -51,6 +51,11 @@ theorem T4_budget_no_heal
   case forCong => cases hE
   case enforceCong => cases hE
   case evalFunCong => cases hE
+  case varDeclEval => cases hE
+  case varDeclBind => cases hE
+  case assignEval => cases hE
+  case assignWrite => cases hE
+  case varReadStep => cases hE
   case oracleSuccess a _ _ _ =>
       cases a
       · exact ⟨_, rfl⟩
@@ -66,21 +71,14 @@ theorem T4_budget_no_heal
 
 /-- **T4b (Truthful Success).** If the oracle is eventually truthful for a
     `gen` site and the policy allows the action, there exists an error
-    context from which a successful `oracleSuccess` step fires.
-
-    The signature was weakened from the original "for the given `ec`" to
-    "for *some* `ec`" because the new `Oracle.eventuallyTruthful`
-    predicate only guarantees the existence of *some* error context at
-    which the oracle returns a well-typed value — it does not give us the
-    value at the caller's `ec`.  This matches the existential form of the
-    old `T4_truthful_success` lemma. -/
+    context and store from which a successful `oracleSuccess` step fires. -/
 theorem T4_truthful_success
     (O : Oracle) (P : Policy) (τ : Ty) (s : String) (π : Principal)
     (hauth : policyAllows P π .gen)
     (htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
-    ∃ ec C', Step O ⟨ec, P, .gen τ s π⟩ C' := by
+    ∃ ec σ C', Step O ⟨ec, P, σ, .gen τ s π⟩ C' := by
   obtain ⟨_σ, _hlen, v, _hv_mem, ⟨ec, hO⟩, hrt, _⟩ := htruth
-  refine ⟨ec, ⟨ec ++ [Event.success], P, .val v⟩, ?_⟩
+  refine ⟨ec, Store.empty, ⟨ec ++ [Event.success], P, Store.empty, .val v⟩, ?_⟩
   exact Step.oracleSuccess (a := OAction.gen τ s π) hauth hO hrt
 
 end HADL

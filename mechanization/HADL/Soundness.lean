@@ -28,13 +28,15 @@ theorem T1_WF_preservation
   | jsStep _ => exact hwf
   | sayStep => exact hwf
   | askStep _ _ =>
+      refine ⟨?_, hwf.2⟩
       show ErrCtx.retries (_ ++ [Event.success]) ≤ retryBudget
       simp [retryBudget]
   | oracleSuccess _ _ _ =>
+      refine ⟨?_, hwf.2⟩
       show ErrCtx.retries (_ ++ [Event.success]) ≤ retryBudget
       simp [retryBudget]
-  | oracleHealType _ _ _ hbudget => exact hbudget
-  | oracleHealPol _ hbudget => exact hbudget
+  | oracleHealType _ _ _ hbudget => exact ⟨hbudget, hwf.2⟩
+  | oracleHealPol _ hbudget => exact ⟨hbudget, hwf.2⟩
   | evalSuccess _ => exact hwf
   | enforceInstall _ => exact hwf
   | letCong _ ih => exact ih hwf
@@ -43,6 +45,11 @@ theorem T1_WF_preservation
   | forCong _ ih => exact ih hwf
   | enforceCong _ ih => exact ih hwf
   | evalFunCong _ ih => exact ih hwf
+  | varDeclEval _ ih => exact ih hwf
+  | varDeclBind hrt => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
+  | assignEval _ ih => exact ih hwf
+  | assignWrite _ hrt => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
+  | varReadStep _ => exact hwf
 
 /-- Every value has *some* runtime type. Weak typing on records /
     arrays keeps this unconditional. -/
@@ -71,8 +78,8 @@ appears as `.val v` with `v : Value` and the conclusion is
 `e'.isValueB = true → ∃ τ, RtType e' τ`.
 -/
 theorem T2_staged_materialization
-    (O : Oracle) (ec ec' : ErrCtx) (P P' : Policy) (e e' : Expr) :
-    Step O ⟨ec, P, e⟩ ⟨ec', P', e'⟩ →
+    (O : Oracle) (ec ec' : ErrCtx) (P P' : Policy) (σ σ' : Store) (e e' : Expr) :
+    Step O ⟨ec, P, σ, e⟩ ⟨ec', P', σ', e'⟩ →
     e'.isValueB = true →
     ∃ v, e' = .val v ∧ ∃ τ, RtType v τ := by
   intro _hs hv
@@ -91,6 +98,9 @@ theorem T2_staged_materialization
   | evalE _ _   => simp [Expr.isValueB] at hv
   | enforce _   => simp [Expr.isValueB] at hv
   | js _        => simp [Expr.isValueB] at hv
+  | varDecl _ _ _ _ => simp [Expr.isValueB] at hv
+  | assign _ _  => simp [Expr.isValueB] at hv
+  | varRead _   => simp [Expr.isValueB] at hv
 
 /-- **T3 (Policy Monotonicity).** Step only installs forbid policies, so
     the allow-set shrinks. -/
@@ -120,5 +130,10 @@ theorem T3_policy_monotonicity
   | forCong _ ih => exact ih
   | enforceCong _ ih => exact ih
   | evalFunCong _ ih => exact ih
+  | varDeclEval _ ih => exact ih
+  | varDeclBind _ => exact Set.Subset.rfl
+  | assignEval _ ih => exact ih
+  | assignWrite _ _ => exact Set.Subset.rfl
+  | varReadStep _ => exact Set.Subset.rfl
 
 end HADL
