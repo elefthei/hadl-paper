@@ -11,9 +11,6 @@ import HADL.Lemmas
 
 namespace HADL
 
-/-- A config is an error config iff its expression is the terminal error marker. -/
-def Config.isErr (C : Config) : Prop := ∃ ec e, C.expr = .errTerm ec e
-
 /--
   Helper: if every binding of ρ is runtime-typed, and we extend ρ with a
   fresh name `x₀` mapped to `b₀` with `RtType ρ b₀.value b₀.ty`, then every
@@ -97,63 +94,112 @@ theorem bindings_preserved_on_fresh_extendAll
 -/
 theorem T1_WF_preservation
     {O : Oracle} {C C' : Config}
-    (hwf : C.WF) (hstep : PureStep O C C') (_hne : ¬ C'.isErr) :
+    (hwf : C.WF) (hstep : Step O C C') (_hne : ¬ C'.isErr) :
     C'.WF := by
-  obtain ⟨hbinds, _hres, hlen⟩ := hwf
-  cases hstep with
+  induction hstep with
   | var _ _ =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | letBind hrt hfr =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extend hbinds hfr hrt
   | assign hlk hvar hrt =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_assign hbinds hlk hvar hrt
   | ifTrue =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | ifFalse =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | whileUnfold =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | forNil =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | forCons hrt hfr =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extend hbinds hfr hrt
   | seqStep =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | jsStep _ =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | genSuccess _ _ _ hstage =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, hstage⟩, by simp [retryBudget]⟩
   | genHealType _ _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | genHealPol _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | enforceInstall _ _ _ _ =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | askStep _ _ =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, by simp [retryBudget]⟩
   | sayStep =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩
   | agentSuccess _ _ _ =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, by simp [retryBudget]⟩
   | agentHealType _ _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | agentHealPol _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | evalSuccess _ _ hrt hfr =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
       refine ⟨?_, ⟨_, StType.schemaWildcard⟩, hlen⟩
       exact bindings_preserved_on_fresh_extendAll _ _ hbinds hfr hrt
   | evalHealType _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | evalHealPol _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
   | genBudgetExhausted _ =>
-      -- C' has expr = .errTerm, contradicting `¬ C'.isErr`.
       exact absurd ⟨_, _, rfl⟩ _hne
   | enforceHeal _ _ _ _ hbudget =>
+      obtain ⟨hbinds, _, _⟩ := hwf
       exact ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hbudget⟩
+  -- Congruence cases: inner IH gives inner WF; outer WF lifts via the
+  -- residual wildcard plus the `hne_inner` side condition of the rule
+  -- (which rules out inner errTerm and unblocks the IH).
+  | letCong _ hne_inner ih =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
+      obtain ⟨hbinds', _, hlen'⟩ :=
+        ih (show Config.WF _ from ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩) hne_inner
+      exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
+  | assignCong _ hne_inner ih =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
+      obtain ⟨hbinds', _, hlen'⟩ :=
+        ih (show Config.WF _ from ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩) hne_inner
+      exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
+  | ifCong _ hne_inner ih =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
+      obtain ⟨hbinds', _, hlen'⟩ :=
+        ih (show Config.WF _ from ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩) hne_inner
+      exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
+  | seqCong _ hne_inner ih =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
+      obtain ⟨hbinds', _, hlen'⟩ :=
+        ih (show Config.WF _ from ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩) hne_inner
+      exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
+  | forCong _ hne_inner ih =>
+      obtain ⟨hbinds, _, hlen⟩ := hwf
+      obtain ⟨hbinds', _, hlen'⟩ :=
+        ih (show Config.WF _ from ⟨hbinds, ⟨_, StType.schemaWildcard⟩, hlen⟩) hne_inner
+      exact ⟨hbinds', ⟨_, StType.schemaWildcard⟩, hlen'⟩
 
 /--
   **T2 — Staged Materialization Soundness.** Direct read-off of the
@@ -167,12 +213,12 @@ theorem T2_staged_materialization
 /--
   **T3 — Policy Monotonicity.** Along any trace, the allow set can only
   shrink. Immediate from the per-step `Step.policy_shrinks`, inducted over
-  the reflexive-transitive closure `PureSteps`.
+  the reflexive-transitive closure `Steps`.
 -/
 theorem T3_policy_monotonicity
     {O : Oracle} {C C' : Config}
-    (h : PureSteps O C C') :
+    (h : Steps O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol :=
-  PureSteps.policy_shrinks h
+  Steps.policy_shrinks h
 
 end HADL

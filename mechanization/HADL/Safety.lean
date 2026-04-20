@@ -1,7 +1,7 @@
--- T4 Oracle-Relative Safety — gen-local fragments (stated over `PureStep`).
+-- T4 Oracle-Relative Safety — gen-local fragments (stated over `Step`).
 --
 -- We prove two gen-local claims of T4 over the pure-core relation
--- `PureStep`:
+-- `Step`:
 --   (BudgetProgress) once `retries(Σ) > retryBudget` at a gen, the
 --                    `genBudgetExhausted` rule fires (deterministic
 --                    fail-fast).
@@ -58,9 +58,9 @@ theorem T4_budget_progress
     {O : Oracle} {ρ : Env} {ε : ErrCtx} {P : Policy} {π : Principal}
     {τ : Ty} {s : String}
     (hover : ErrCtx.retries ε > retryBudget) :
-    PureStep O ⟨ρ, ε, P, π, .gen τ s none⟩
+    Step O ⟨ρ, ε, P, π, .gen τ s none⟩
          ⟨ρ, ε, P, π, .errTerm ε (.gen τ s none)⟩ := by
-  exact PureStep.genBudgetExhausted (O := O)
+  exact Step.genBudgetExhausted (O := O)
     (ρ := ρ) (ec := ε) (P := P) (π := π)
     (τ := τ) (s := s) hover
 
@@ -81,11 +81,11 @@ theorem T4_truthful_success
       ErrCtx.retries ec ≤ retryBudget ∧
       O s ec τ v ∧
       RtType ρ v τ ∧
-      PureStep O ⟨ρ, ec, P, π, .gen τ s none⟩
+      Step O ⟨ρ, ec, P, π, .gen τ s none⟩
            ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩ := by
   obtain ⟨ec, hlen, v, hO, hrt⟩ := hET s ρ τ P π hauth
   refine ⟨ec, v, hlen, hO, hrt, ?_⟩
-  exact PureStep.genSuccess (O := O)
+  exact Step.genSuccess (O := O)
     (ρ := ρ) (ec := ec) (P := P) (π := π)
     (τ := τ) (s := s) (v := v)
     hauth hO hrt StType.valueWildcard

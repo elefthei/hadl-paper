@@ -121,10 +121,10 @@ theorem RtType.weaken_to_assign
       rw [Env.lookup_extend_of_ne _ hne]
       exact hlk
 
-theorem PureStep.policy_shrinks {O : Oracle} {C C' : Config}
-    (h : PureStep O C C') :
+theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : Step O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
-  cases h with
+  induction h with
   | var _ _             => exact fun _ hp => hp
   | letBind _ _         => exact fun _ hp => hp
   | assign _ _ _        => exact fun _ hp => hp
@@ -150,12 +150,18 @@ theorem PureStep.policy_shrinks {O : Oracle} {C C' : Config}
   | evalHealPol _ _     => exact fun _ hp => hp
   | genBudgetExhausted _ => exact fun _ hp => hp
   | enforceHeal _ _ _ _ _ => exact fun _ hp => hp
+  -- Congruence cases: inner IH already gives the monotonicity.
+  | letCong _ _ ih    => exact ih
+  | assignCong _ _ ih => exact ih
+  | ifCong _ _ ih     => exact ih
+  | seqCong _ _ ih    => exact ih
+  | forCong _ _ ih    => exact ih
 
-theorem PureSteps.policy_shrinks {O : Oracle} {C C' : Config}
-    (h : PureSteps O C C') :
+theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : Steps O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   induction h with
   | refl => exact fun _ hp => hp
-  | step s _ ih => exact fun x hp => PureStep.policy_shrinks s (ih hp)
+  | step s _ ih => exact fun x hp => Step.policy_shrinks s (ih hp)
 
 end HADL

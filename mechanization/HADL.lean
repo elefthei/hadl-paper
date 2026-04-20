@@ -4,7 +4,7 @@
 --   T1 WF-Preservation            — proven in HADL.Soundness
 --   T2 Staged Materialization     — proven in HADL.Soundness
 --   T3 Policy Monotonicity        — proven in HADL.Soundness
---   T4 Oracle-Relative Safety     — gen-local fragments proven in HADL.Safety
+--   T4 Oracle-Relative Safety     — T4a/T4b root, T4c congruence-lifted in HADL.Safety2
 
 import HADL.Syntax
 import HADL.Env
@@ -17,7 +17,4 @@ import HADL.Reduction
 import HADL.Lemmas
 import HADL.Soundness
 import HADL.Safety
-import HADL.Extract
-import HADL.ExtractShape
-import HADL.BigStep
 import HADL.Safety2

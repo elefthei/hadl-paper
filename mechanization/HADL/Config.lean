@@ -15,6 +15,9 @@ structure Config where
   princ     : Principal
   expr      : Expr
 
+/-- A config is an error config iff its expression is the terminal error marker. -/
+def Config.isErr (C : Config) : Prop := ∃ ec e, C.expr = .errTerm ec e
+
 /-- Retry budget. Global parameter of the paper's model. -/
 def retryBudget : Nat := 3    -- placeholder; make configurable later
 
