@@ -59,43 +59,45 @@ This appendix gives the reduction rules elided from \sect{sec:sem-reduction}. Ev
   {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Say{s}} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Tunit}}
 
 \inferrule*[right=\rulename{Agent-Success}]
-  {\PolOk{\MPol}{\MPrin}{\texttt{agent}} \\
+  {\Extr{e} = (\Agent{s},\,x,\,\mathit{suf}) \\
+   \PolOk{\MPol}{\MPrin}{\texttt{agent}} \\
    \Oracle{s}{\MErr}{\Tstring} \ni v \\
    \RtType{\MEnv}{v}{\Tstring}}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Agent{s}]} \step \MConfig{\MEnv}{\emptyset}{\MPol}{\MPrin}{E[v]}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv[\MBind{x}{v}{\Tstring}{\ell}{\texttt{let}}]}{\emptyset}{\MPol}{\MPrin}{\mathit{suf}}}
 
 \inferrule*[right=\rulename{Eval-Success}]
   {\PolOk{\MPol}{\MPrin}{\texttt{eval}} \\
    v = \MEnv(f) \\
    v = \texttt{workflow}\;f(\overline{x_i{:}T_i}) \to T\;\{e_b\} \\
    \forall i.\,\RtType{\MEnv}{v_i}{T_i}}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Eval{f}{\overline{v_i}}]} \step \MConfig{\MEnv[\overline{\MBind{x_i}{v_i}{T_i}{\emptyset}{\texttt{let}}}]}{\MErr}{\MPol}{\MPrin}{E[e_b]}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Eval{f}{\overline{v_i}}} \stepP \MConfig{\MEnv[\overline{\MBind{x_i}{v_i}{T_i}{\emptyset}{\texttt{let}}}]}{\MErr}{\MPol}{\MPrin}{e_b}}
 \end{mathpar}
 
-The $\rulename{Agent-Success}$ rule mirrors $\rulename{Gen-Success}$ but always returns $\Tstring$, so no residual re-type-check is needed. $\rulename{Eval-Success}$ invokes a workflow value that was either defined statically or produced by a prior arrow-typed $\Gen{\Tarrow{A}{R}}{s}$; argument types are checked at the call site and the body $e_b$ reduces in the caller's environment extended with the parameter bindings.
+The $\rulename{Agent-Success}$ rule mirrors $\rulename{Gen-Success}$ but always returns $\Tstring$, so no residual re-type-check is needed: the continuation binder $x$ produced by $\mathtt{Extract}$ binds the returned string in $\mathit{suf}$. $\rulename{Eval-Success}$ is a pure-core rule that invokes a workflow value that was either defined statically or produced by a prior arrow-typed $\Gen{\Tarrow{A}{R}}{s}$; it propagates to nested positions via $\rulename{GStep-Pure}$ and the pure-core congruence rules.
 
 \subsection{Agent and Eval Heal}
 \label{app:rules-heal}
 
-Heal rules for $\Agent{s}$ and $\Eval{f}{\overline{v_i}}$ mirror $\rulename{Gen-Heal-Type}$ and $\rulename{Gen-Heal-Pol}$:
+Heal rules for $\Agent{s}$ and $\Enforce{x}$ mirror $\rulename{Gen-Heal-Type}$ and $\rulename{Gen-Heal-Pol}$:
 
 \begin{mathpar}
 \inferrule*[right=\rulename{Agent-Heal-Type}]
-  {\Oracle{s}{\MErr}{\Tstring} \ni v \\
+  {\Extr{e} = (\Agent{s},\,x,\,\mathit{suf}) \\
+   \Oracle{s}{\MErr}{\Tstring} \ni v \\
    \lnot\,\RtType{\MEnv}{v}{\Tstring} \\
    \epsilon = \Explain{v}{\Tstring} \\
    |\MErr \cdot \epsilon| \le \MRetry}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Agent{s}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Agent{s}]}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{e}}
 
 \inferrule*[right=\rulename{Enforce-Heal}]
   {\MEnv(x) = (p,\Tpolicy,\_,\_) \\
    \Install{\MPol}{p} \text{ undefined or widens} \\
    \epsilon = \Explain{p}{\MPol} \\
    |\MErr \cdot \epsilon| \le \MRetry}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Enforce{x}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Gen{\Tpolicy}{s_x}]}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Enforce{x}} \stepP \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{\Gen{\Tpolicy}{s_x}}}
 \end{mathpar}
 
-In $\rulename{Enforce-Heal}$, $s_x$ denotes the prompt recorded in the provenance of the binding for $x$. The rule rewinds to the causal gen so the oracle can retry with the Cedar compilation or monotonicity error as feedback.
+In $\rulename{Enforce-Heal}$, $s_x$ denotes the prompt recorded in the provenance of the binding for $x$. The rule rewinds to the causal gen so the oracle can retry with the Cedar compilation or monotonicity error as feedback; at non-toplevel positions, $\rulename{GStep-Pure}$ and congruence lift it to the surrounding context.
 
 \section{Proof of Theorem~\ref{thm:hadl-sound}}
 \label{app:proofs}
@@ -107,7 +109,7 @@ We expand the argument clause by clause. Each induction is on the derivation of 
 \paragraph{Case $\rulename{Gen-Success}$.} Assume $\WF{C_n}$. We must show $\WF{C_{n+1}}$. Four side conditions of the rule discharge the four clauses of well-formedness:
 \begin{itemize}
   \item $\RtType{\MEnv_n}{v}{\tau}$ establishes clause (1) for the new binding.
-  \item $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ is exactly clause (2).
+  \item $\StType{\Projenv{\MEnv_{n+1}}}{\mathit{suf}}{\tau'}$ is exactly clause (2).
   \item The provenance label $\ell$ for the new binding is fresh (axiom \texttt{freshLabel\_is\_fresh}) and cannot create a cycle, establishing clause (3).
   \item $\MErr_{n+1} = \emptyset$, trivially within budget, establishing clause (4).
 \end{itemize}
@@ -128,7 +130,7 @@ We expand the argument clause by clause. Each induction is on the derivation of 
 
 \subsection{(T2) Staged Materialization Soundness}
 
-The side condition $\StType{\Projenv{\MEnv_{n+1}}}{E[v]}{\tau'}$ on $\rulename{Gen-Success}$ re-checks the entire residual expression against the extended static context. If the newly bound name $x_\ell$ appears in any subsequent type annotation position, $\Projenv{\MEnv_{n+1}}$ maps $x_\ell$ to the materialized type $\tau$. The $\StType{\cdot}{\cdot}{\cdot}$ judgment resolves name references through this map, so any downstream $\Let{y}{x_\ell}{\Gen{x_\ell}{s'}}$ is checked against the concrete $\tau$ rather than against $\Tschema$.
+The side condition $\StType{\Projenv{\MEnv_{n+1}}}{\mathit{suf}}{\tau'}$ on $\rulename{Gen-Success}$ re-checks the residual expression $\mathit{suf}$ returned by $\mathtt{Extract}$ against the extended static context. If the newly bound name $x$ (the $\mathtt{Extract}$ continuation binder) or any other materialized-type name appears in a subsequent type annotation position, $\Projenv{\MEnv_{n+1}}$ maps it to the materialized type $\tau$. The $\StType{\cdot}{\cdot}{\cdot}$ judgment resolves name references through this map, so any downstream $\Let{y}{x_\ell}{\Gen{x_\ell}{s'}}$ is checked against the concrete $\tau$ rather than against $\Tschema$.
 
 \subsection{(T3) Policy Monotonicity}
 
@@ -144,46 +146,14 @@ Fix a gen-stuck configuration $C_n$ with $\PolOk{\MPol_n}{\MPrin_n}{\texttt{gen}
 
 \subsection{(T4c) Oracle-Relative Termination}
 
-Argue by a well-founded measure on reduction sequences. Trace-level gen progress is mechanized (Appendix~\ref{app:extract}): given a hygienic source program, $\mathtt{Extract}$-based defunctionalization lifts (T4b) from a bare redex to any gen-reachable configuration. The remaining ingredient --- a well-founded measure on intermediate pure-core reductions --- is argued on paper. Between two successive applications of a generative rule, only pure-core rules fire. Pure-core reduction terminates on any expression whose \texttt{while} and \texttt{for} loops terminate, which we assume of $e_0$. At each generative step, either a success rule fires or a heal rule extends $\MErr$ by one element. Since $|\MErr| \le \MRetry$, at most $\MRetry$ heal steps occur before either (T4b) fires or $|\MErr|>\MRetry$ forces (T4a). Under eventually-truthful $\mathcal{O}$, (T4b) fires within the budget, $\MErr$ is flushed, and the process repeats for the next generative site. Since the number of generative sites reached along the trace is finite (bounded by the size of $e_0$ plus finitely many eval expansions), the whole trace terminates. When $\mathcal{O}$ is not eventually-truthful at some site, (T4a) fires and produces a terminal error configuration whose provenance label, under the well-formedness assumption of Cor.~\ref{cor:blame}, is exactly the failing gen.
+Argue by a well-founded measure on reduction sequences. Trace-level gen progress is mechanized (Appendix~\ref{app:extract}) by instantiating the $\mathtt{Extract}$-mediated $\rulename{Gen-Success}$ rule of \S\ref{sec:sem-reduction} at any gen-reachable configuration under a source-program hygiene hypothesis. The remaining ingredient --- a well-founded measure on intermediate pure-core reductions --- is argued on paper. Between two successive applications of a generative rule, only pure-core rules fire. Pure-core reduction terminates on any expression whose \texttt{while} and \texttt{for} loops terminate, which we assume of $e_0$. At each generative step, either a success rule fires or a heal rule extends $\MErr$ by one element. Since $|\MErr| \le \MRetry$, at most $\MRetry$ heal steps occur before either (T4b) fires or $|\MErr|>\MRetry$ forces (T4a). Under eventually-truthful $\mathcal{O}$, (T4b) fires within the budget, $\MErr$ is flushed, and the process repeats for the next generative site. Since the number of generative sites reached along the trace is finite (bounded by the size of $e_0$ plus finitely many eval expansions), the whole trace terminates. When $\mathcal{O}$ is not eventually-truthful at some site, (T4a) fires and produces a terminal error configuration whose provenance label, under the well-formedness assumption of Cor.~\ref{cor:blame}, is exactly the failing gen.
 
-\subsection{Mechanizing $E[\cdot]$ via Extract}
+\subsection{Hygiene and the Mechanized Extract/GStep Proof}
 \label{app:extract}
 
-The $E[\cdot]$-congruence cases of \figr{fig:rules-core} and Appendix~\ref{app:rules} are presented on paper as schematic abstractions; the mechanized \texttt{Step} relation is their top-level fragment (all $E=[\cdot]$). To close this gap for trace-level progress --- in particular, to lift (T4b) from ``the redex \emph{is} a gen'' to ``the expression \emph{contains} a gen at an evaluation position'' --- the mechanization \emph{defunctionalizes} $E[\cdot]$ as a syntactic operation.
+The $\mathtt{Extract}$ function and the reduction relation $\step$ it mediates are defined in \S\ref{sec:sem-reduction} and \figr{fig:extract}. Because $\mathtt{Extract}$ binds its continuation through environment extension (rather than substitution) using a \emph{reserved} fresh name, its soundness requires that source programs --- and oracle-produced values --- do not themselves use names from that reserved namespace. This appendix records the Lean formalization of this hygiene condition and the key weakening lemma used to prove trace-level gen progress.
 
-\paragraph{The \texttt{Extract} operator.} We define a total function
-\[
-\mathtt{Extract} : \mathsf{Expr} \to (\mathsf{Expr} \times \mathsf{Name} \times \mathsf{Expr})_{\bot}
-\]
-that, given $e$, either returns $\bot$ when no oracle head is reachable in $e$ at an evaluation position, or returns a triple $(e_h, x, e_k)$ where:
-\begin{itemize}
-  \item $e_h$ is the \emph{leftmost} oracle head in $e$, i.e.\ a $\Gen{\tau}{s}$ or $\Agent{s}$ occurrence reachable by a standard left-to-right evaluation order;
-  \item $x$ is a \emph{fresh reserved} continuation binder, drawn from the namespace of names beginning with the prefix \texttt{\_\_ex\_} (concretely \texttt{\_\_ex\_gen} for gen and \texttt{\_\_ex\_ag} for agent);
-  \item $e_k$ is the continuation, i.e.\ the expression obtained from $e$ by replacing the leftmost oracle head with $x$.
-\end{itemize}
-Loops are handled by a purely syntactic rewrite before recursion: $\Whl{e_c}{p}$ is treated as $\Iff{e_c}{\Seq{p}{\Whl{e_c}{p}}}{\Tunit}$ and $\mathtt{Extract}$ recurses into $e_c$ only. This preserves structural recursion (\texttt{Expr}-sized) and avoids a divergent re-unrolling.
-
-\paragraph{The \texttt{GStep} relation.} On top of the existing pure-core $\step$ relation, we layer $\step_g$:
-\[
-\inferrule*[Left=\rulename{GStep-Pure}]
-  {\mathtt{Extract}(e) = \bot \\ C \step C'}
-  {C \step_g C'}
-\]
-\[
-\inferrule*[Left=\rulename{GStep-Run}]
-  {\mathtt{Extract}(e) = (e_h, x, e_k) \\
-   \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e_h}
-     \step
-   \MConfig{\MEnv'}{\MErr'}{\MPol'}{\MPrin'}{v} \\
-   \RtType{\MEnv'}{v}{\tau} \\
-   x \not\in \mathsf{dom}(\MEnv')}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e}
-     \step_g
-   \MConfig{\MEnv'[\MBind{x}{v}{\tau}{\bot}{\texttt{let}}]}{\MErr'}{\MPol'}{\MPrin'}{e_k}}
-\]
-The continuation binder $x$ is \emph{bound by environment extension} rather than substituted. Every downstream use of $x$ inside $e_k$ is resolved by the existing $\rulename{Var}$ rule; no auxiliary substitution machinery is introduced.
-
-\paragraph{Hygiene.} Because continuation binders live in the reserved namespace \texttt{\_\_ex\_*}, the defunctionalization is correct precisely when source programs and oracle-produced values do not name variables in that namespace. The mechanization formalizes this as:
+\paragraph{Hygiene.} Continuation binders live in the reserved namespace of names beginning with the prefix \texttt{\_\_ex\_} (concretely \texttt{\_\_ex\_gen} for gen and \texttt{\_\_ex\_ag} for agent). The mechanization formalizes hygiene as:
 \begin{itemize}
   \item $\mathsf{Name.IsRes}(n) \iff n$ begins with the prefix \texttt{\_\_ex\_};
   \item $\tau.\mathsf{hygienic}$: for a type variable requires that the variable's name is not reserved; trivially true for every other type constructor (the type is inspected only through the $\rulename{tVarResolve}$ rule of $\RtType{\cdot}{\cdot}{\cdot}$);
@@ -193,6 +163,6 @@ The key lemma \texttt{RtType.weaken\_extend\_reserved} states that if $\RtType{\
 
 \paragraph{Trace-level gen progress.} With these pieces in place, the mechanization proves
 \begin{theorem}[Extract-based gen progress, Lean \texttt{T4\_gStep\_progress\_gen}]
-  Let $\mathcal{O}$ be eventually-truthful at budget $\MRetry$ and $\PolOk{\MPol}{\MPrin}{\texttt{gen}}$. If $\mathtt{Extract}(e) = (\Gen{\tau}{s}, x, e_k)$, and the source program is hygienic in the sense above, then there exist $\epsilon$ and $C'$ with $\MConfig{\MEnv}{\epsilon}{\MPol}{\MPrin}{e} \step_g C'$.
+  Let $\mathcal{O}$ be eventually-truthful at budget $\MRetry$ and $\PolOk{\MPol}{\MPrin}{\texttt{gen}}$. If $\Extr{e} = (\Gen{\tau}{s}, x, \mathit{suf})$, and the source program is hygienic in the sense above, then there exist $\epsilon$ and $C'$ with $\MConfig{\MEnv}{\epsilon}{\MPol}{\MPrin}{e} \step C'$ via $\rulename{Gen-Success}$.
 \end{theorem}
-This is the trace-level lifting of (T4b): no congruence-rule plumbing is needed; the Extract defunctionalization does the routing. The agent-case is structurally identical (same proof shape, different reduction rule, reserved binder \texttt{\_\_ex\_ag}). The pure-core termination measure remaining in (T4c) is orthogonal to this closure and is still argued only on paper.
+This is the trace-level lifting of (T4b): no congruence-rule plumbing is needed; the $\mathtt{Extract}$ routing does it. The agent-case is structurally identical (same proof shape, different reduction rule, reserved binder \texttt{\_\_ex\_ag}). The pure-core termination measure remaining in (T4c) is orthogonal to this closure and is still argued only on paper.

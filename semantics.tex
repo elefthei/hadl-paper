@@ -26,14 +26,14 @@ $\MPol$ & Installed Cedar policy. Updated by $\Enforce{x}$ via append-only \\
   & merge; only tightens. \\
 $\MPrin$ & Current principal, inherited from the surrounding $\texttt{as}$ clause \\
   & or defaulted to \texttt{"gen"} / \texttt{"agent"}. \\
-$e$ & Expression under reduction (in evaluation context $E$). \\
+$e$ & Expression under reduction. \\
 \bottomrule
 \end{tabular}
 \caption{Components of a \hadl machine configuration.}
 \label{fig:config}
 \end{figure}
 
-Values $v$ include base literals, records, arrays, workflow ASTs (for arrow-typed binders), Cedar policy values, and \emph{schema values} $\Tschema(\tau)$ that reify a concrete type at runtime. Evaluation contexts $E$ are standard left-to-right for sequencing, conditionals, and argument positions.
+Values $v$ include base literals, records, arrays, workflow ASTs (for arrow-typed binders), Cedar policy values, and \emph{schema values} $\Tschema(\tau)$ that reify a concrete type at runtime. The order in which sub-expressions reduce is fixed by a syntactic extraction function $\mathtt{Extract}$ (\S\ref{sec:sem-reduction}), which surfaces the leftmost oracle-head (a $\Gen{\tau}{s}$ or $\Agent{s}$) for the step relation to act on.
 
 \subsection{Judgments}
 \label{sec:sem-judgments}
@@ -57,60 +57,92 @@ The formal model uses four judgments that interlock runtime values, static types
 \subsection{Reduction}
 \label{sec:sem-reduction}
 
-The reduction relation $C \step C'$ decomposes into three alternating layers. \figr{fig:rules-core} gives a selection of core and generative rules; the remaining rules appear in the appendix. Throughout this figure and the appendix, we use evaluation contexts $E$ for presentation; the mechanized reduction relation is the top-level fragment (all $E=[\cdot]$), with the $E[\cdot]$ cases obtained by the standard congruence closure and elided in Lean for brevity.
+The reduction relation $C \step C'$ is the top-level closure, over a partial extraction function $\mathtt{Extract}$, of a pure-core small-step relation $\stepP$. $\Extr{e}$ returns either $(pre,\,x,\,suf)$ --- where $pre$ is the leftmost oracle head in $e$ (a $\Gen{\tau}{s}$ or $\Agent{s}$), $x$ is a fresh binder drawn from a reserved namespace disjoint from source identifiers, and $suf$ is the residual obtained by replacing that occurrence of $pre$ with $x$ --- or $\bot$ when no oracle head is visible. \figr{fig:extract} gives its defining clauses. Reduction then decomposes into two layers glued by $\mathtt{Extract}$: a pure core $\stepP$ (L1), closed under congruence for sequencing, conditionals, loops, and binders; and an oracle-execution step (L2) that fires on extracted heads. Policy installation (L3) lives in L1 and propagates through congruence.
+
+\begin{figure}[t]
+\small
+\begin{align*}
+  \Extr{\Gen{\tau}{s}}     &= (\Gen{\tau}{s},\;x_g,\;x_g) \\
+  \Extr{\Agent{s}}         &= (\Agent{s},\;x_a,\;x_a) \\
+  \Extr{\Seq{\Let{x}{\tau}{e_1}}{e_2}}
+    &= (p,\;y,\;\Seq{\Let{x}{\tau}{e_1'}}{e_2}) \; \text{if } \Extr{e_1}=(p,y,e_1') \\
+  \Extr{\Iff{e_c}{e_1}{e_2}}
+    &= (p,\;y,\;\Iff{e_c'}{e_1}{e_2}) \; \text{if } \Extr{e_c}=(p,y,e_c') \\
+  \Extr{\Whl{e_c}{e}}
+    &= \Extr{\Iff{e_c}{\Seq{e}{\Whl{e_c}{e}}}{\Tunit}} \\
+  \Extr{\Seq{e_1}{e_2}}
+    &= (p,\;y,\;\Seq{e_1'}{e_2}) \; \text{if } \Extr{e_1}=(p,y,e_1') \\
+  \Extr{v}, \; \Extr{\Js{s}}, \; \Extr{\Enforce{x}}, \; \ldots &= \bot
+\end{align*}
+\caption{Extraction function (selected clauses). The fresh binders $x_g, x_a, y$ are drawn from a reserved namespace; a program-level hygiene hypothesis ensures they do not collide with source identifiers.}
+\label{fig:extract}
+\end{figure}
 
 \begin{figure*}[t]
 \small
 \begin{mathpar}
 \inferrule*[right=\rulename{Var}]
   {\MEnv(x) = (v,\_,\_,\_)}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{x} \step \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{v}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{x} \stepP \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{v}}
 
 \inferrule*[right=\rulename{Let-Bind}]
   { }
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Let{x}{\tau}{v}} \step \MConfig{\MEnv[\MBind{x}{v}{\tau}{\emptyset}{\texttt{let}}]}{\emptyset}{\MPol}{\MPrin}{\Tunit}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Let{x}{\tau}{v}} \stepP \MConfig{\MEnv[\MBind{x}{v}{\tau}{\emptyset}{\texttt{let}}]}{\emptyset}{\MPol}{\MPrin}{\Tunit}}
 
-\inferrule*[right=\rulename{Gen-Success}]
-  {\PolOk{\MPol}{\MPrin}{\texttt{gen}} \\
-   \Oracle{s}{\MErr}{\tau} \ni v \\
-   \RtType{\MEnv}{v}{\tau} \\
-   \StType{\Projenv{\MEnv[\MBind{x_\ell}{v}{\tau}{\ell}{\texttt{let}}]}}{E[v]}{\tau'}}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]} \step \MConfig{\MEnv[\MBind{x_\ell}{v}{\tau}{\ell}{\texttt{let}}]}{\emptyset}{\MPol}{\MPrin}{E[v]}}
-
-\inferrule*[right=\rulename{Gen-Heal-Type}]
-  {\Oracle{s}{\MErr}{\tau} \ni v \\
-   \lnot\,\RtType{\MEnv}{v}{\tau} \\
-   \epsilon = \Explain{v}{\tau} \\
-   |\MErr \cdot \epsilon| \le \MRetry}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]}}
-
-\inferrule*[right=\rulename{Gen-Heal-Pol}]
-  {\lnot\,\PolOk{\MPol}{\MPrin}{\texttt{gen}} \\
-   \epsilon = \Explain{\MPrin}{\MPol} \\
-   |\MErr \cdot \epsilon| \le \MRetry}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]}}
-
-\inferrule*[right=\rulename{Gen-Budget-Exhausted}]
-  {|\MErr| = \MRetry \\
-   \Oracle{s}{\MErr}{\tau} \ni v \\
-   \lnot\,\RtType{\MEnv}{v}{\tau} \lor \lnot\,\PolOk{\MPol}{\MPrin}{\texttt{gen}}}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Gen{\tau}{s}]} \step \mathsf{err}(\MErr,\,\Prov(\Gen{\tau}{s}))}
+\inferrule*[right=\rulename{Let-Cong}]
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e_1} \stepP \MConfig{\MEnv'}{\MErr'}{\MPol'}{\MPrin'}{e_1'}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Seq{\Let{x}{\tau}{e_1}}{e_2}} \stepP \MConfig{\MEnv'}{\MErr'}{\MPol'}{\MPrin'}{\Seq{\Let{x}{\tau}{e_1'}}{e_2}}}
 
 \inferrule*[right=\rulename{Enforce-Install}]
   {\MEnv(x) = (p,\Tpolicy,\_,\_) \\
    \Install{\MPol}{p} = \MPol' \\
    \Allow{\MPol'} \subseteq \Allow{\MPol}}
-  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{E[\Enforce{x}]} \step \MConfig{\MEnv}{\MErr}{\MPol'}{\MPrin}{E[\Tunit]}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{\Enforce{x}} \stepP \MConfig{\MEnv}{\MErr}{\MPol'}{\MPrin}{\Tunit}}
+
+\inferrule*[right=\rulename{GStep-Pure}]
+  {\Extr{e} = \bot \\
+   \MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \stepP \MConfig{\MEnv'}{\MErr'}{\MPol'}{\MPrin'}{e'}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv'}{\MErr'}{\MPol'}{\MPrin'}{e'}}
+
+\inferrule*[right=\rulename{Gen-Success}]
+  {\Extr{e} = (\Gen{\tau}{s},\,x,\,\mathit{suf}) \\
+   \PolOk{\MPol}{\MPrin}{\texttt{gen}} \\
+   \Oracle{s}{\MErr}{\tau} \ni v \\
+   \RtType{\MEnv}{v}{\tau} \\
+   \StType{\Projenv{\MEnv[\MBind{x}{v}{\tau}{\ell}{\texttt{let}}]}}{\mathit{suf}}{\tau'}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv[\MBind{x}{v}{\tau}{\ell}{\texttt{let}}]}{\emptyset}{\MPol}{\MPrin}{\mathit{suf}}}
+
+\inferrule*[right=\rulename{Gen-Heal-Type}]
+  {\Extr{e} = (\Gen{\tau}{s},\,x,\,\mathit{suf}) \\
+   \Oracle{s}{\MErr}{\tau} \ni v \\
+   \lnot\,\RtType{\MEnv}{v}{\tau} \\
+   \epsilon = \Explain{v}{\tau} \\
+   |\MErr \cdot \epsilon| \le \MRetry}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{e}}
+
+\inferrule*[right=\rulename{Gen-Heal-Pol}]
+  {\Extr{e} = (\Gen{\tau}{s},\,x,\,\mathit{suf}) \\
+   \lnot\,\PolOk{\MPol}{\MPrin}{\texttt{gen}} \\
+   \epsilon = \Explain{\MPrin}{\MPol} \\
+   |\MErr \cdot \epsilon| \le \MRetry}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \MConfig{\MEnv}{\MErr \cdot \epsilon}{\MPol}{\MPrin}{e}}
+
+\inferrule*[right=\rulename{Gen-Budget-Exhausted}]
+  {\Extr{e} = (\Gen{\tau}{s},\,x,\,\mathit{suf}) \\
+   |\MErr| = \MRetry \\
+   \Oracle{s}{\MErr}{\tau} \ni v \\
+   \lnot\,\RtType{\MEnv}{v}{\tau} \lor \lnot\,\PolOk{\MPol}{\MPrin}{\texttt{gen}}}
+  {\MConfig{\MEnv}{\MErr}{\MPol}{\MPrin}{e} \step \mathsf{err}(\MErr,\,\Prov(\Gen{\tau}{s}))}
 \end{mathpar}
-\caption{Selected reduction rules. Evaluation contexts $E$ propagate reduction through subexpressions. Rule $\rulename{Gen-Success}$ pre-checks the policy, calls the oracle, verifies the runtime type, and re-type-checks the residual $E[v]$ against the extended environment, all as side conditions; only if all four succeed does the step fire. Rules $\rulename{Gen-Heal-Type}$ and $\rulename{Gen-Heal-Pol}$ self-heal by appending feedback to $\MErr$ and re-reducing the same $\Gen{\tau}{s}$ expression. The install operation $\Install{\MPol}{p}$ bundles the deny-all guard, action-type validation, append-only merge, and scoped principal check. Label $\ell$ is the source span of the $\Gen{\tau}{s}$ call, used as provenance.}
+\caption{Selected reduction rules. The pure core $\stepP$ (top group) captures variables, binding, congruence (exemplified by $\rulename{Let-Cong}$; analogous rules for sequencing, conditionals, loops, and \texttt{for} appear in Appendix~\ref{app:rules}), and policy installation. The $\mathtt{Extract}$-mediated GStep layer (bottom group) runs oracle heads: $\rulename{Gen-Success}$ pre-checks the policy, calls the oracle, verifies the runtime type, and re-type-checks the residual $\mathit{suf}$ against the extended environment, all as side conditions; only if all four succeed does the step fire. Rules $\rulename{Gen-Heal-Type}$ and $\rulename{Gen-Heal-Pol}$ self-heal by appending feedback to $\MErr$ and keeping $e$ unchanged so the next step re-extracts the same $\Gen{\tau}{s}$. The install operation $\Install{\MPol}{p}$ bundles the deny-all guard, action-type validation, append-only merge, and scoped principal check. Label $\ell$ is the source span of the $\Gen{\tau}{s}$ call, used as provenance.}
 \label{fig:rules-core}
 \end{figure*}
 
-\paragraph{L1: pure core.} $\rulename{Var}$, $\rulename{Let-Bind}$, $\rulename{Assign}$, $\rulename{If-True}$/$\rulename{If-False}$, $\rulename{While}$, $\rulename{For}$, $\rulename{Js}$, and $\rulename{Seq}$ form a standard call-by-value small-step semantics. They preserve $\MErr$, $\MPol$, and $\MPrin$ except that $\rulename{Let-Bind}$ flushes $\MErr$ to $\emptyset$.
+\paragraph{L1: pure core.} $\rulename{Var}$, $\rulename{Let-Bind}$, $\rulename{Assign}$, $\rulename{If-True}$/$\rulename{If-False}$, $\rulename{While}$, $\rulename{For}$, $\rulename{Js}$, $\rulename{Seq}$, and $\rulename{Enforce-Install}$ form a standard call-by-value small-step relation $\stepP$ closed under congruence (exemplified in Fig.~\ref{fig:rules-core} by $\rulename{Let-Cong}$; the remaining congruence rules live in Appendix~\ref{app:rules}). They preserve $\MErr$, $\MPol$, and $\MPrin$ except that $\rulename{Let-Bind}$ flushes $\MErr$ to $\emptyset$ and $\rulename{Enforce-Install}$ updates $\MPol$.
 
-\paragraph{L2: gen layer.} Every $\Gen{\tau}{s}$ reduction goes through four side conditions: a policy pre-check, an oracle call, a runtime-type check, and a residual re-type-check. $\rulename{Gen-Success}$ fires only when all four succeed. When the oracle returns a value that fails the runtime-type check, $\rulename{Gen-Heal-Type}$ appends a diagnostic to $\MErr$ and steps back to the same expression, giving the next oracle call access to the accumulated feedback. $\rulename{Gen-Heal-Pol}$ handles the symmetric case where the policy rejects the call. $\rulename{Gen-Budget-Exhausted}$ fires deterministically when the heal context has reached the declared retry budget $\MRetry$ and the most recent attempt still fails; it transitions to a terminal error configuration that records both $\MErr$ and the provenance label of the causal $\Gen{\tau}{s}$ call.
+\paragraph{L2: gen layer.} When $\Extr{e} = (\Gen{\tau}{s},\,x,\,\mathit{suf})$, the extracted gen is run at the top level through four side conditions: a policy pre-check, an oracle call, a runtime-type check, and a residual re-type-check against $\mathit{suf}$ under the extended environment. $\rulename{Gen-Success}$ fires only when all four succeed; the residual $\mathit{suf}$ (with $x$ bound in $\MEnv'$) replaces $e$. When the oracle returns a value that fails the runtime-type check, $\rulename{Gen-Heal-Type}$ appends a diagnostic to $\MErr$ and keeps $e$; the next step will re-extract the same $\Gen{\tau}{s}$, this time with the enlarged heal context visible to the oracle. $\rulename{Gen-Heal-Pol}$ handles the symmetric policy-rejection case. $\rulename{Gen-Budget-Exhausted}$ fires deterministically when the heal context has reached $\MRetry$ and the most recent attempt still fails; it transitions to a terminal error configuration recording both $\MErr$ and the provenance label of the causal $\Gen{\tau}{s}$ call.
 
-\paragraph{L3: policy layer.} $\rulename{Enforce-Install}$ installs a $\Tpolicy$-typed value by invoking $\Install{\MPol}{p}$, which (i) rejects any blanket $\texttt{forbid}$ policy under the deny-all guard, (ii) rejects unknown action types, (iii) merges the rules append-only, and (iv) checks that every $\texttt{as}$ clause reachable before the next $\Enforce$ names a principal defined in the merged policy. The side condition $\Allow{\MPol'} \subseteq \Allow{\MPol}$ makes monotone tightening an integral part of the rule: any install that widens permissions cannot fire. $\rulename{Enforce-Heal}$ (in the appendix) mirrors $\rulename{Gen-Heal-Type}$ for the case where the underlying policy value fails to compile.
+\paragraph{L3: policy layer.} $\rulename{Enforce-Install}$ is a pure-core rule that propagates to any position through congruence: at any sub-expression position for which $\Extr{e} = \bot$, $\rulename{GStep-Pure}$ lifts $\rulename{Enforce-Install}$ to a top-level step. The install operation (i) rejects any blanket $\texttt{forbid}$ policy under the deny-all guard, (ii) rejects unknown action types, (iii) merges the rules append-only, and (iv) checks that every $\texttt{as}$ clause reachable before the next $\Enforce$ names a principal defined in the merged policy. The side condition $\Allow{\MPol'} \subseteq \Allow{\MPol}$ makes monotone tightening an integral part of the rule: any install that widens permissions cannot fire. $\rulename{Enforce-Heal}$ (in the appendix) mirrors $\rulename{Gen-Heal-Type}$ for the case where the underlying policy value fails to compile.
 
 \subsection{Correctness}
 \label{sec:sem-correctness}
@@ -126,13 +158,13 @@ This point-wise phrasing matches the form used in the mechanization: it quantifi
 
 \begin{theorem}[\hadl soundness]
 \label{thm:hadl-sound}
-Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3), (T4a), and (T4b) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact, sorry-free, covering every rule in \S\ref{sec:semantics} and Appendix~\ref{app:rules}. Trace-level progress for the gen case of (T4c) is additionally mechanized via an \texttt{Extract}-based defunctionalization of $E[\cdot]$ (Appendix~\ref{app:extract}) under a source-program hygiene hypothesis; the agent case is analogous. The pure-core termination measure underlying (T4c) is argued only on paper.}
+Let $\mathcal{O}$ be any oracle and let $C_0 = \MConfig{\emptyset}{\emptyset}{\MPol_0}{\MPrin_0}{e_0}$ be an initial configuration with $\WF{C_0}$. Then every reduction trace $C_0 \step C_1 \step \cdots$ satisfies:\footnote{Clauses (T1)--(T3), (T4a), and (T4b) are mechanized in Lean~4 under \texttt{mechanization/} in the artifact, sorry-free, covering every rule in \S\ref{sec:semantics} and Appendix~\ref{app:rules}. Trace-level progress for the gen case of (T4c) is additionally proved under a source-program hygiene hypothesis that reserves the $\mathtt{Extract}$ binder namespace (Appendix~\ref{app:extract}); the agent case is analogous. The pure-core termination measure underlying (T4c) is argued only on paper.}
 \begin{enumerate}
   \item \textbf{\textsc{(T1) WF-Preservation.}} For every $n$ with $C_n$ not a terminal error, $\WF{C_n}$.
-  \item \textbf{\textsc{(T2) Staged Materialization Soundness.}} Whenever $C_n \step C_{n+1}$ is an application of $\rulename{Gen-Success}$, the residual $e_{n+1}$ type-checks against $\Projenv{\MEnv_{n+1}}$; every subsequent $\Gen{\tau'}{s'}$ with an annotation referring to a name newly bound at step $n{+}1$ is checked against the materialized concrete type.
+  \item \textbf{\textsc{(T2) Staged Materialization Soundness.}} Whenever $C_n \step C_{n+1}$ is an application of $\rulename{Gen-Success}$ with $\Extr{e_n} = (\Gen{\tau}{s},\,x,\,\mathit{suf})$, the expression $e_{n+1}$ of $C_{n+1}$ --- namely $\mathit{suf}$ with $x$ now bound to the materialized $v$ in $\MEnv_{n+1}$ --- type-checks against $\Projenv{\MEnv_{n+1}}$; every subsequent $\Gen{\tau'}{s'}$ with an annotation referring to a name newly bound at step $n{+}1$ is checked against the materialized concrete type.
   \item \textbf{\textsc{(T3) Policy Monotonicity.}} For $m \le n$, $\Allow{\MPol_n} \subseteq \Allow{\MPol_m}$; and every $\rulename{Gen-Success}$, $\rulename{Agent-Success}$, or $\rulename{Eval-Success}$ step between $m$ and $n$ satisfied the policy-authorization side condition under $\MPol_k$ and $\MPrin_k$ at its point of application.
-  \item \textbf{\textsc{(T4a) Budget Progress.}} If at some $C_n$ the redex is a bare $\Gen{\tau}{s}$ and $|\MErr_n| > \MRetry$, then $\rulename{Gen-Budget-Exhausted}$ fires at step $n$ and yields a terminal error configuration carrying $\MErr_n$ and the gen's provenance label.
-  \item \textbf{\textsc{(T4b) Truthful Gen-Success.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ (\defn{def:oracle-truthful}) and at $C_n$ the redex is a bare $\Gen{\tau}{s}$ with $\PolOk{\MPol_n}{\MPrin_n}{\texttt{gen}}$, then there exist $\epsilon$ with $|\epsilon|\le\MRetry$ and $v$ with $\RtType{\MEnv_n}{v}{\tau}$ such that $\rulename{Gen-Success}$ fires from $C_n[\MErr_n := \epsilon]$ and flushes the heal context to $\emptyset$.
+  \item \textbf{\textsc{(T4a) Budget Progress.}} If at some $C_n$ we have $\Extr{e_n} = (\Gen{\tau}{s},\,x,\,\mathit{suf})$ and $|\MErr_n| > \MRetry$, then $\rulename{Gen-Budget-Exhausted}$ fires at step $n$ and yields a terminal error configuration carrying $\MErr_n$ and the gen's provenance label.
+  \item \textbf{\textsc{(T4b) Truthful Gen-Success.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ (\defn{def:oracle-truthful}) and at $C_n$ we have $\Extr{e_n} = (\Gen{\tau}{s},\,x,\,\mathit{suf})$ with $\PolOk{\MPol_n}{\MPrin_n}{\texttt{gen}}$, then there exist $\epsilon$ with $|\epsilon|\le\MRetry$ and $v$ with $\RtType{\MEnv_n}{v}{\tau}$ such that $\rulename{Gen-Success}$ fires from $C_n[\MErr_n := \epsilon]$ and flushes the heal context to $\emptyset$.
   \item \textbf{\textsc{(T4c) Oracle-Relative Termination.}} If $\mathcal{O}$ is eventually-truthful at budget $\MRetry$ and all pure loops in $e_0$ terminate, then $C_0 \steps C_\text{final}$ with $e_\text{final}$ a value. If at some gen site $\mathcal{O}$ is not eventually-truthful, the trace terminates in a terminal error configuration $\mathsf{err}(\MErr,\Prov(\Gen{\tau}{s}))$ whose provenance label identifies the specific $\Gen{\tau}{s}$ call that exhausted its budget.
 \end{enumerate}
 \end{theorem}
