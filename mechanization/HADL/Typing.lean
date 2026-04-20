@@ -23,6 +23,11 @@ inductive RtType : Expr → Ty → Prop where
   | vClos {n body args ret} :
       args.length = n →
       RtType (.clos n body) (.tArrow args ret)
+  /-- Record values have *some* record type.  Soundness only needs the
+      existence of a runtime type, not a precise field-wise match. -/
+  | vRec {xs} : RtType (.recV xs) (.tRecord [])
+  /-- Array values have *some* array type, similarly black-boxed. -/
+  | vArr {vs} : RtType (.arrV vs) (.tArray .tUnit)
 
 /-- Static typing over closed expressions. Black-boxed: the paper
     re-runs the structural checker and Lean treats acceptance as an

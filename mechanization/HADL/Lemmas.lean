@@ -20,4 +20,39 @@ theorem retries_append_success (ec : ErrCtx) :
     ErrCtx.retries (ec ++ [Event.success]) = 0 := by
   simp
 
+/-- Single-step reduction can only shrink (or preserve) the allow set. -/
+theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : Step O C C') :
+    policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
+  induction h with
+  | letBind _ _              => exact fun _ hp => hp
+  | ifTrue                   => exact fun _ hp => hp
+  | ifFalse                  => exact fun _ hp => hp
+  | whileUnfold              => exact fun _ hp => hp
+  | forNil                   => exact fun _ hp => hp
+  | forCons _                => exact fun _ hp => hp
+  | seqStep _                => exact fun _ hp => hp
+  | jsStep _ _               => exact fun _ hp => hp
+  | sayStep                  => exact fun _ hp => hp
+  | askStep _ _ _            => exact fun _ hp => hp
+  | oracleSuccess _ _ _ _    => exact fun _ hp => hp
+  | oracleHealType _ _ _ _   => exact fun _ hp => hp
+  | oracleHealPol _ _        => exact fun _ hp => hp
+  | evalSuccess _ _          => exact fun _ hp => hp
+  | enforceInstall hinst     => exact policyInstall_shrinks _ _ _ hinst
+  | letCong _ ih             => exact ih
+  | ifCong _ ih              => exact ih
+  | seqCong _ ih             => exact ih
+  | forCong _ ih             => exact ih
+  | enforceCong _ ih         => exact ih
+  | evalFunCong _ ih         => exact ih
+
+/-- Multi-step reduction can only shrink (or preserve) the allow set. -/
+theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : Steps O C C') :
+    policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
+  induction h with
+  | refl => exact fun _ hp => hp
+  | step s _ ih => exact fun x hp => Step.policy_shrinks s (ih hp)
+
 end HADL

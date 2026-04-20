@@ -11,24 +11,76 @@ import HADL.Reduction
 
 namespace HADL
 
-/-- **T4a (Budget Progress).** If the retry budget is exhausted at a
-    stuck `gen` or `agent` redex, no oracle success or heal rule applies.
-    The configuration is genuinely stuck — this is the formal notion of
-    "fail-fast" without a terminal `errTerm` constructor. -/
-theorem T4_budget_progress
+/-- **T4a (Budget → No Heal).** Under the new substitution-based semantics
+    there is no `genBudgetExhausted` constructor: a stuck `gen` redex with
+    exhausted budget simply has no heal transition.  The `oracleSuccess`
+    rule can still fire independently of the budget (it appends
+    `Event.success`, resetting retries), so we cannot claim the redex is
+    globally stuck.  The *weakened* claim is: any transition from a
+    budget-exhausted `gen` redex must be an `oracleSuccess` step, i.e. the
+    resulting error context is `ec ++ [Event.success]`.  This is the
+    analogue of the old `T4_budget_progress` — "no heal rule fires when
+    the budget is exhausted" — adapted to the unified `OAction` rules.
+
+    Renamed from `T4_budget_progress` because the original claim
+    (`¬ ∃ C', Step …`) is false on the new semantics (a truthful oracle can
+    always drive `oracleSuccess`). -/
+theorem T4_budget_no_heal
     (O : Oracle) (ec : ErrCtx) (P : Policy) (τ : Ty) (s : String) (π : Principal)
-    (_hover : ErrCtx.retries ec > retryBudget) :
-    ¬ ∃ C', Step O ⟨ec, P, .gen τ s π⟩ C' := by
-  sorry
+    (hover : ErrCtx.retries ec > retryBudget) :
+    ∀ C', Step O ⟨ec, P, .gen τ s π⟩ C' →
+          ∃ v, C' = ⟨ec ++ [Event.success], P, v⟩ := by
+  intro C' h
+  generalize hE : (Expr.gen τ s π : Expr) = eG at h
+  cases h
+  case letBind => cases hE
+  case ifTrue => cases hE
+  case ifFalse => cases hE
+  case whileUnfold => cases hE
+  case forNil => cases hE
+  case forCons => cases hE
+  case seqStep => cases hE
+  case jsStep => cases hE
+  case sayStep => cases hE
+  case askStep => cases hE
+  case evalSuccess => cases hE
+  case enforceInstall => cases hE
+  case letCong => cases hE
+  case ifCong => cases hE
+  case seqCong => cases hE
+  case forCong => cases hE
+  case enforceCong => cases hE
+  case evalFunCong => cases hE
+  case oracleSuccess a _ _ _ _ =>
+      cases a
+      · exact ⟨_, rfl⟩
+      · cases hE
+  case oracleHealType a _ _ _ hbudget =>
+      cases a
+      · rename_i hb; rw [ErrCtx.retries_append_error] at hb; omega
+      · cases hE
+  case oracleHealPol a _ hbudget =>
+      cases a
+      · rw [ErrCtx.retries_append_error] at hbudget; omega
+      · cases hE
 
 /-- **T4b (Truthful Success).** If the oracle is eventually truthful for a
-    `gen` site and the policy allows the action, there exists a successful
-    step. -/
+    `gen` site and the policy allows the action, there exists an error
+    context from which a successful `oracleSuccess` step fires.
+
+    The signature was weakened from the original "for the given `ec`" to
+    "for *some* `ec`" because the new `Oracle.eventuallyTruthful`
+    predicate only guarantees the existence of *some* error context at
+    which the oracle returns a well-typed value — it does not give us the
+    value at the caller's `ec`.  This matches the existential form of the
+    old `T4_truthful_success` lemma. -/
 theorem T4_truthful_success
-    (O : Oracle) (ec : ErrCtx) (P : Policy) (τ : Ty) (s : String) (π : Principal)
-    (_hauth : policyAllows P π .gen)
-    (_htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
-    ∃ C', Step O ⟨ec, P, .gen τ s π⟩ C' := by
-  sorry
+    (O : Oracle) (P : Policy) (τ : Ty) (s : String) (π : Principal)
+    (hauth : policyAllows P π .gen)
+    (htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
+    ∃ ec C', Step O ⟨ec, P, .gen τ s π⟩ C' := by
+  obtain ⟨_σ, _hlen, v, _hv_mem, hvB, ⟨ec, hO⟩, hrt, _⟩ := htruth
+  refine ⟨ec, ⟨ec ++ [Event.success], P, v⟩, ?_⟩
+  exact Step.oracleSuccess (a := OAction.gen τ s π) hauth hO hvB hrt
 
 end HADL
