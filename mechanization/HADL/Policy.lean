@@ -1,4 +1,5 @@
--- Cedar-Lean wrapper: thin interface used by Reduction and Soundness.
+-- Cedar-backed policy; append-only forbid installation.
+-- Thin Cedar-Lean wrapper used by Reduction and Soundness.
 -- Policies are drawn from Cedar's Lean mechanization; `policyInstall` is
 -- append-only and only admits sequences of forbid-effect policies, which
 -- gives us an iterated application of Cedar's `unchanged_deny_when_add_forbid`

@@ -1,4 +1,5 @@
--- Top-level import for the HADL mechanization.
+-- Root module: re-exports all public definitions and theorems of the HADL
+-- mechanization.
 --
 -- Soundness scope:
 --   T1 WF-Preservation            — proven in HADL.Soundness

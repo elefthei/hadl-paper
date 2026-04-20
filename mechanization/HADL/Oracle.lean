@@ -1,3 +1,4 @@
+-- Oracle signature and eventual-truthfulness predicate.
 -- Nondeterministic oracle relation (two-sort: returns a `Value`).
 
 import HADL.Syntax

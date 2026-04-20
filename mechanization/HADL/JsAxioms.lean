@@ -1,4 +1,5 @@
--- Stub JavaScript interop layer (two-sort: returns a `Value`).
+-- Stub JavaScript interop layer: total `jsEval` + well-typedness lemma
+-- (two-sort: returns a `Value`).
 
 import HADL.Syntax
 import HADL.Typing

@@ -1,5 +1,5 @@
 -- Auxiliary lemmas for the substitution-based HADL model.
--- Phase B target: discharge the sorries in this file.
+-- Multi-step policy-monotonicity lemma `policy_shrinks`.
 
 import HADL.Syntax
 import HADL.Typing
