@@ -97,7 +97,7 @@ theorem bindings_preserved_on_fresh_extendAll
 -/
 theorem T1_WF_preservation
     {O : Oracle} {C C' : Config}
-    (hwf : C.WF) (hstep : Step O C C') (_hne : ¬ C'.isErr) :
+    (hwf : C.WF) (hstep : PureStep O C C') (_hne : ¬ C'.isErr) :
     C'.WF := by
   obtain ⟨hbinds, _hres, hlen⟩ := hwf
   cases hstep with
@@ -167,12 +167,12 @@ theorem T2_staged_materialization
 /--
   **T3 — Policy Monotonicity.** Along any trace, the allow set can only
   shrink. Immediate from the per-step `Step.policy_shrinks`, inducted over
-  the reflexive-transitive closure `Steps`.
+  the reflexive-transitive closure `PureSteps`.
 -/
 theorem T3_policy_monotonicity
     {O : Oracle} {C C' : Config}
-    (h : Steps O C C') :
+    (h : PureSteps O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol :=
-  Steps.policy_shrinks h
+  PureSteps.policy_shrinks h
 
 end HADL

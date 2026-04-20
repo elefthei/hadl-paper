@@ -1,17 +1,18 @@
--- T4 Oracle-Relative Safety — gen-local fragments.
+-- T4 Oracle-Relative Safety — gen-local fragments (stated over `PureStep`).
 --
--- Honest mechanization scope: we prove two gen-local claims of T4:
---   (BudgetProgress) once |ε| > retryBudget at a gen, `genBudgetExhausted`
---                    fires (deterministic fail-fast).
---   (Truthful)       under an eventually-truthful oracle at an authorized
---                    policy, `Gen-Success` fires from the gen-stuck
---                    config, flushing ε and binding the result.
+-- We prove two gen-local claims of T4 over the pure-core relation
+-- `PureStep`:
+--   (BudgetProgress) once `retries(Σ) > retryBudget` at a gen, the
+--                    `genBudgetExhausted` rule fires (deterministic
+--                    fail-fast).
+--   (Truthful)       under an eventually-truthful oracle at an
+--                    authorized policy, `genSuccess` fires from the
+--                    gen-stuck config, flushing Σ and binding the
+--                    result.
 --
--- Full trace-level T4 ("every trace terminates in a value or blamed
--- errTerm") additionally requires (i) an E[·] congruence extension to
--- `Step` and (ii) a termination hypothesis on the pure-core fragment;
--- both are treated informally in the paper (§4 T4 and Appendix A) and
--- left to future mechanization.
+-- Trace-level progress (gen + agent), lifted to the unified `Step`
+-- relation defined in `BigStep.lean`, lives in `Safety2.lean`.
+-- Pure-core termination is deferred to the paper (see README).
 
 import HADL.Syntax
 import HADL.Env
@@ -57,9 +58,9 @@ theorem T4_budget_progress
     {O : Oracle} {ρ : Env} {ε : ErrCtx} {P : Policy} {π : Principal}
     {τ : Ty} {s : String}
     (hover : ErrCtx.retries ε > retryBudget) :
-    Step O ⟨ρ, ε, P, π, .gen τ s none⟩
+    PureStep O ⟨ρ, ε, P, π, .gen τ s none⟩
          ⟨ρ, ε, P, π, .errTerm ε (.gen τ s none)⟩ := by
-  exact Step.genBudgetExhausted (O := O)
+  exact PureStep.genBudgetExhausted (O := O)
     (ρ := ρ) (ec := ε) (P := P) (π := π)
     (τ := τ) (s := s) hover
 
@@ -80,11 +81,11 @@ theorem T4_truthful_success
       ErrCtx.retries ec ≤ retryBudget ∧
       O s ec τ v ∧
       RtType ρ v τ ∧
-      Step O ⟨ρ, ec, P, π, .gen τ s none⟩
+      PureStep O ⟨ρ, ec, P, π, .gen τ s none⟩
            ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩ := by
   obtain ⟨ec, hlen, v, hO, hrt⟩ := hET s ρ τ P π hauth
   refine ⟨ec, v, hlen, hO, hrt, ?_⟩
-  exact Step.genSuccess (O := O)
+  exact PureStep.genSuccess (O := O)
     (ρ := ρ) (ec := ec) (P := P) (π := π)
     (τ := τ) (s := s) (v := v)
     hauth hO hrt StType.valueWildcard

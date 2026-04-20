@@ -121,8 +121,8 @@ theorem RtType.weaken_to_assign
       rw [Env.lookup_extend_of_ne _ hne]
       exact hlk
 
-theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
-    (h : Step O C C') :
+theorem PureStep.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : PureStep O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   cases h with
   | var _ _             => exact fun _ hp => hp
@@ -151,11 +151,11 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | genBudgetExhausted _ => exact fun _ hp => hp
   | enforceHeal _ _ _ _ _ => exact fun _ hp => hp
 
-theorem Steps.policy_shrinks {O : Oracle} {C C' : Config}
-    (h : Steps O C C') :
+theorem PureSteps.policy_shrinks {O : Oracle} {C C' : Config}
+    (h : PureSteps O C C') :
     policyAllowSet C'.pol ⊆ policyAllowSet C.pol := by
   induction h with
   | refl => exact fun _ hp => hp
-  | step s _ ih => exact fun x hp => Step.policy_shrinks s (ih hp)
+  | step s _ ih => exact fun x hp => PureStep.policy_shrinks s (ih hp)
 
 end HADL
