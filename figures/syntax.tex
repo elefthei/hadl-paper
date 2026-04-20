@@ -1,0 +1,36 @@
+\begin{figure}[t]
+\[\begin{array}{rcll}
+P & ::= & \pi^*\; d^* & \textit{program} \\[4pt]
+\pi & ::= & \texttt{@policy}\; s & \textit{policy pragma} \\
+    & \mid & \texttt{@retries}\; n & \textit{retry pragma} \\[4pt]
+d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow declaration} \\
+  & \mid & \texttt{type}\; X = T & \textit{type declaration} \\[4pt]
+T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \textit{base types} \\
+  & \mid & \texttt{Schema} & \textit{type of types} \\
+  & \mid & \texttt{Policy} & \textit{authorization policy} \\
+  & \mid & (T_1 \to T_2) & \textit{arrow type} \\
+  & \mid & \texttt{array[}T\texttt{]} & \textit{array type} \\
+  & \mid & \{ \overline{x_i{:}T_i} \} & \textit{record type} \\
+  & \mid & X & \textit{named type reference} \\[4pt]
+e & ::= & s \mid n \mid b & \textit{literals} \\
+  & \mid & x & \textit{variable reference} \\
+  & \mid & \texttt{let}\; x {:} T = e \mid \texttt{let}\; x = e & \textit{immutable binding} \\
+  & \mid & \texttt{var}\; x {:} T = e \mid \texttt{var}\; x = e & \textit{mutable binding} \\
+  & \mid & x = e & \textit{assignment} \\
+  & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] & \textit{conditional} \\
+  & \mid & \texttt{while}\; (e)\; \{e\} & \textit{loop} \\
+  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \textit{iteration} \\
+  & \mid & \texttt{ask}\; s & \textit{human prompt} \\
+  & \mid & \texttt{say}\; s & \textit{human output} \\
+  & \mid & \texttt{gen}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM gen call} \\
+  & \mid & \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM agent call} \\
+  & \mid & \texttt{js}\; c & \textit{JavaScript expression} \\
+  & \mid & \texttt{eval}\; e\;(e_1, \ldots, e_k) & \textit{workflow invocation} \\
+  & \mid & \texttt{enforce}\; x & \textit{policy activation} \\
+  & \mid & e_1 \;\mathit{op}\; e_2 & \textit{comparison} \\
+  & \mid & e_1 ;\; e_2 & \textit{sequencing} \\[4pt]
+\mathit{op} & ::= & \texttt{==} \mid \texttt{!=} \mid \texttt{<} \mid \texttt{<=} \mid \texttt{>} \mid \texttt{>=} & \textit{comparison operators}
+\end{array}\]
+\caption{Abstract syntax of HADL. Optional components are in square brackets and $\overline{x_i{:}T_i}$ denotes a possibly empty sequence.}
+\label{fig:syntax}
+\end{figure}

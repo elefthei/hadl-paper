@@ -1,0 +1,59 @@
+\begin{figure}[H]
+\centering
+\begin{subfigure}[c]{0.54\linewidth}
+\begin{lstlisting}[language=hadl,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
+workflow pick_car() -> String {
+  let prefs = ask "What matters most to you?"
+  let car_schema: Schema = gen "Generate a
+    schema for a car with a name and a type."
+  let scorer: (car_schema -> Number) = gen "Create
+    a workflow that scores a car based on `prefs`."
+  var best: String = ""
+  var top: Number = 0
+  var i: Number = 0
+  while (i < 3) {
+    let car: car_schema = gen "Fill the schema
+      with a popular car matching `prefs`."
+    let score: Number = eval scorer(car)
+    if (score > top) {
+      top = score
+      best = js car.name
+    }
+    say "`car.name` rated `score`."
+    i = js i + 1
+  }
+  say "Recommended `best`."
+  best
+}
+\end{lstlisting}
+\subcaption{Outer workflow.}
+\end{subfigure}%
+\begin{minipage}[c]{0.08\linewidth}
+\centering
+\begin{tikzpicture}[>=Stealth]
+  \draw[->, very thick] (0,0.25) -- (0.7,0.25)
+    node[midway, above, font=\tiny] {generated};
+  \draw[<-, very thick] (0,-0.25) -- (0.7,-0.25)
+    node[midway, below, font=\tiny] {runs here};
+\end{tikzpicture}
+\end{minipage}%
+\begin{subfigure}[c]{0.37\linewidth}
+\begin{lstlisting}[language=hadl,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
+// produced by the gen
+// call on line 5 above
+workflow score(car: car_schema)
+  -> Number {
+  let comfort: Number = gen "Rate
+    the comfort of `car.name`."
+  let cost: Number = gen "Rate
+    the cost of `car.name`."
+  let safety: Number = gen "Rate
+    the safety of `car.name`."
+  js (comfort + cost + safety) / 3
+}
+\end{lstlisting}
+\subcaption{Generated workflow.}
+\end{subfigure}
+\caption{A car recommendation workflow illustrating gradual validation for workflow generation. The outer workflow (left) asks the LLM to produce the scorer (right) with workflow type \texttt{(car\_schema -> Number)}, which is then invoked via \texttt{eval} on each of three schema-typed cars.}
+\label{fig:overview-workflow}
+\end{figure}
