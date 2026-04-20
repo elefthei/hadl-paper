@@ -1,256 +1,165 @@
--- Small-step reduction. Three layers: L1 core / L2 gen / L3 policy.
+-- Small-step reduction over 3-tuple configurations, substitution-based CBV.
 
 import HADL.Syntax
-import HADL.Env
 import HADL.Typing
 import HADL.Policy
 import HADL.Oracle
 import HADL.JsAxioms
 import HADL.Config
 
+open LeanSubst
+
 namespace HADL
 
-def EvalCtx.plug : EvalCtx → Expr → Expr
-  | .hole, e => e
-  | _, e => e
+/-- Oracle action tag: gen / agent / eval. Shared between success and
+    type-heal rules. -/
+inductive OAction where
+  | gen   : Ty → String → Principal → OAction
+  | agent : String → Principal → OAction
 
-opaque explainType   : Value → Ty → String
-opaque explainPolicy : Principal → Policy → String
-/-- Implementation-supplied prompt for regenerating the policy value bound
-    to `x` on Enforce-Heal. Opaque: in the formal model we do not commit
-    to how the implementation recovers the prompt — this abstracts over
-    whether it is stored alongside the binding, in a registry, or in the
-    IDE. -/
-opaque provPrompt : Env → Name → String
+def OAction.stmt : OAction → String
+  | .gen _ s _   => s
+  | .agent s _   => s
+
+def OAction.ty : OAction → Ty
+  | .gen τ _ _ => τ
+  | .agent _ _ => .tString
+
+def OAction.princ : OAction → Principal
+  | .gen _ _ π => π
+  | .agent _ π => π
+
+def OAction.effect : OAction → Action
+  | .gen _ _ _   => .gen
+  | .agent _ _   => .agent
+
+def OAction.toExpr : OAction → Expr
+  | .gen τ s π => .gen τ s π
+  | .agent s π => .agent s π
+
+opaque explain : OAction → Expr → String
+opaque explainPolicy : OAction → Policy → String
 
 /--
   Small-step relation `C ⟶ C'`, parameterized by an oracle `O`.
-  We use `ec` for the heal-context component (paper's `Σ`).
+
+  Substitution-based CBV: `letE` reduces by instantiating the body
+  with the value; `forE` reduces by substituting the head element and
+  recursing on the tail.
+
+  The three oracle rules (success/type-heal/policy-heal) are unified
+  across gen and agent via the `OAction` tag.
 -/
 inductive Step (O : Oracle) : Config → Config → Prop where
-  | var {ρ ec P π x v b}
-      (h : Env.lookup ρ x = some b)
-      (hv : b.value = v) :
-      Step O ⟨ρ, ec, P, π, .var x⟩ ⟨ρ, ec, P, π, .valE v⟩
 
-  | letBind {ρ ec P π m x τ v e}
-      (hrt : RtType ρ v τ)
-      (hfr : Env.fresh ρ x) :
-      Step O
-        ⟨ρ, ec, P, π, .letE m x τ (.valE v) e⟩
-        ⟨Env.extend ρ x ⟨v, τ, m⟩, ec, P, π, e⟩
+  -- Pure core.
 
-  | assign {ρ ec P π x v b}
-      (hlk : Env.lookup ρ x = some b)
-      (hty : b.mode = .varBind)
-      (hrt : RtType ρ v b.ty) :
-      Step O
-        ⟨ρ, ec, P, π, .assign x (.valE v)⟩
-        ⟨Env.assign ρ x v b, ec, P, π, .unit⟩
+  | letBind {ec P τ v e}
+      (hv : v.isValueB = true)
+      (hrt : RtType v τ) :
+      Step O ⟨ec, P, .letE τ v e⟩ ⟨ec, P, e.instantiate v⟩
 
-  | ifTrue {ρ ec P π e₁ e₂} :
-      Step O
-        ⟨ρ, ec, P, π, .ifE (.litBool true) e₁ e₂⟩
-        ⟨ρ, ec, P, π, e₁⟩
+  | ifTrue {ec P e₁ e₂} :
+      Step O ⟨ec, P, .ifE (.litBool true) e₁ e₂⟩ ⟨ec, P, e₁⟩
 
-  | ifFalse {ρ ec P π e₁ e₂} :
-      Step O
-        ⟨ρ, ec, P, π, .ifE (.litBool false) e₁ e₂⟩
-        ⟨ρ, ec, P, π, e₂⟩
+  | ifFalse {ec P e₁ e₂} :
+      Step O ⟨ec, P, .ifE (.litBool false) e₁ e₂⟩ ⟨ec, P, e₂⟩
 
-  | whileUnfold {ρ ec P π e e'} :
-      Step O
-        ⟨ρ, ec, P, π, .whileE e e'⟩
-        ⟨ρ, ec, P, π, .ifE e (.seq e' (.whileE e e')) .unit⟩
+  | whileUnfold {ec P e e'} :
+      Step O ⟨ec, P, .whileE e e'⟩
+             ⟨ec, P, .ifE e (.seq e' (.whileE e e')) .unit⟩
 
-  | forNil {ρ ec P π x e} :
-      Step O
-        ⟨ρ, ec, P, π, .forE x (.valE (.vArr [])) e⟩
-        ⟨ρ, ec, P, π, .unit⟩
+  | forNil {ec P e} :
+      Step O ⟨ec, P, .forE (.arrV []) e⟩ ⟨ec, P, .unit⟩
 
-  | forCons {ρ ec P π x τ v vs e}
-      (hrt : RtType ρ v τ)
-      (hfr : Env.fresh ρ x) :
-      Step O
-        ⟨ρ, ec, P, π, .forE x (.valE (.vArr (v :: vs))) e⟩
-        ⟨Env.extend ρ x ⟨v, τ, .letBind⟩, ec, P, π,
-         .seq e (.forE x (.valE (.vArr vs)) e)⟩
+  | forCons {ec P v vs e}
+      (hv : v.isValueB = true) :
+      Step O ⟨ec, P, .forE (.arrV (v :: vs)) e⟩
+             ⟨ec, P, .seq (e.instantiate v) (.forE (.arrV vs) e)⟩
 
-  | seqStep {ρ ec P π v e} :
-      Step O
-        ⟨ρ, ec, P, π, .seq (.valE v) e⟩
-        ⟨ρ, ec, P, π, e⟩
+  | seqStep {ec P v e}
+      (hv : v.isValueB = true) :
+      Step O ⟨ec, P, .seq v e⟩ ⟨ec, P, e⟩
 
-  | jsStep {ρ ec P π je v}
-      (h : jsEval je ρ = some v) :
-      Step O ⟨ρ, ec, P, π, .js je⟩ ⟨ρ, ec, P, π, .valE v⟩
+  | jsStep {ec P je v}
+      (h : jsEval je = some v) (hv : v.isValueB = true) :
+      Step O ⟨ec, P, .js je⟩ ⟨ec, P, v⟩
 
-  | genSuccess {ρ ec P π τ s v}
-      (hauth  : policyAllows P π .gen)
-      (horacle : O s ec τ v)
-      (hrt    : RtType ρ v τ) :
-      Step O
-        ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
+  | sayStep {ec P s} :
+      Step O ⟨ec, P, .say s⟩ ⟨ec, P, .unit⟩
 
-  | genHealType {ρ ec P π τ s v}
-      (horacle : O s ec τ v)
-      (hbad    : ¬ RtType ρ v τ)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType v τ)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec ++ [Event.error (explainType v τ)], P, π, .gen τ s none⟩
-
-  | genHealPol {ρ ec P π τ s}
-      (hdeny   : ¬ policyAllows P π .gen)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .gen τ s none⟩
-
-  | enforceInstall {ρ ec P P' π x p b}
-      (hb   : Env.lookup ρ x = some b)
-      (hpol : b.value = .vPol p)
-      (hty  : b.ty = .tPolicy)
-      (hinst : policyInstall P p = some P') :
-      Step O
-        ⟨ρ, ec, P, π, .enforce x⟩
-        ⟨ρ, ec, P', π, .unit⟩
-
-  -- L1/L2: Ask / Say. Ask queries the oracle for a string answer;
-  -- Say is a pure output with no model-level side effect.
-  | askStep {ρ ec P π s v}
+  | askStep {ec P s v}
       (horacle : O s ec .tString v)
-      (hrt     : RtType ρ v .tString) :
-      Step O
-        ⟨ρ, ec, P, π, .ask s⟩
-        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
+      (hv : v.isValueB = true)
+      (hrt : RtType v .tString) :
+      Step O ⟨ec, P, .ask s⟩ ⟨ec ++ [Event.success], P, v⟩
 
-  | sayStep {ρ ec P π s} :
-      Step O
-        ⟨ρ, ec, P, π, .say s⟩
-        ⟨ρ, ec, P, π, .unit⟩
+  -- Unified oracle rules (gen / agent).
 
-  -- L2: Agent family. Agent-Success mirrors Gen-Success but inlines the
-  -- returned value rather than binding it, appending a success event.
-  | agentSuccess {ρ ec P π τ s pr v}
-      (hauth   : policyAllows P π .agent)
-      (horacle : O s ec τ v)
-      (hrt     : RtType ρ v τ) :
-      Step O
-        ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, ec ++ [Event.success], P, π, .valE v⟩
+  | oracleSuccess {ec P v} {a : OAction}
+      (hauth   : policyAllows P a.princ a.effect)
+      (horacle : O a.stmt ec a.ty v)
+      (hv      : v.isValueB = true)
+      (hrt     : RtType v a.ty) :
+      Step O ⟨ec, P, a.toExpr⟩ ⟨ec ++ [Event.success], P, v⟩
 
-  | agentHealType {ρ ec P π τ s pr v}
-      (horacle : O s ec τ v)
-      (hbad    : ¬ RtType ρ v τ)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType v τ)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, ec ++ [Event.error (explainType v τ)], P, π, .agent τ s pr⟩
+  | oracleHealType {ec P v} {a : OAction}
+      (hauth   : policyAllows P a.princ a.effect)
+      (horacle : O a.stmt ec a.ty v)
+      (hbad    : ¬ RtType v a.ty)
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explain a v)]) ≤ retryBudget) :
+      Step O ⟨ec, P, a.toExpr⟩
+             ⟨ec ++ [Event.error (explain a v)], P, a.toExpr⟩
 
-  | agentHealPol {ρ ec P π τ s pr}
-      (hdeny   : ¬ policyAllows P π .agent)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .agent τ s pr⟩
-        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .agent τ s pr⟩
+  | oracleHealPol {ec P} {a : OAction}
+      (hdeny   : ¬ policyAllows P a.princ a.effect)
+      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy a P)]) ≤ retryBudget) :
+      Step O ⟨ec, P, a.toExpr⟩
+             ⟨ec ++ [Event.error (explainPolicy a P)], P, a.toExpr⟩
 
-  -- L2: Eval family. Invokes a workflow value (vClos) extending the env
-  -- with the parameter bindings `bs`. The rule takes `bs` as a witness
-  -- packaging (xᵢ, vᵢ, Tᵢ) together; the name/value/type correspondence
-  -- is checked by the oracle upstream and not re-checked in the rule.
-  | evalSuccess {ρ ec P π xs body} {vs : List Value} {bs : List (Name × Binding)}
-      (hauth   : policyAllows P π .evalA)
-      (_hshape : xs.length = vs.length ∧ vs.length = bs.length)
-      (hrt     : ∀ (x : Name) (b : Binding), (x, b) ∈ bs → RtType ρ b.value b.ty)
-      (hfr     : Env.freshAll ρ bs) :
-      Step O
-        ⟨ρ, ec, P, π, .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
-        ⟨Env.extendAll ρ bs, ec, P, π, body⟩
+  -- Eval: closure application. `clos n body` applied to n values.
 
-  | evalHealType {ρ ec P π xs body} {vs : List Value}
-      (_hbad   : ¬ ∃ bs : List (Name × Binding),
-                      ∀ (x : Name) (b : Binding), (x, b) ∈ bs →
-                        RtType ρ b.value b.ty)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainType (.vClos xs body) .tUnit)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
-        ⟨ρ, ec ++ [Event.error (explainType (.vClos xs body) .tUnit)], P, π,
-         .evalE (.valE (.vClos xs body)) (vs.map .valE)⟩
+  | evalSuccess {ec P n body vs}
+      (_hlen : vs.length = n)
+      (_hv   : ∀ v ∈ vs, v.isValueB = true) :
+      Step O ⟨ec, P, .evalE (.clos n body) vs⟩
+             ⟨ec, P, Expr.smap
+                (vs.foldr (fun v σ => Subst.Action.su v :: σ) (+0 : Subst Expr))
+                body⟩
 
-  | evalHealPol {ρ ec P π e args}
-      (_hdeny  : ¬ policyAllows P π .evalA)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .evalE e args⟩
-        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .evalE e args⟩
+  -- Enforce.
 
-  -- L2: Gen-Budget-Exhausted. When the trailing error-run exceeds the
-  -- retry budget, reduction stops at a terminal error marker carrying
-  -- the full event log and the failing gen expression for blame.
-  | genBudgetExhausted {ρ ec P π τ s}
-      (_hover : ErrCtx.retries ec > retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .gen τ s none⟩
-        ⟨ρ, ec, P, π, .errTerm ec (.gen τ s none)⟩
+  | enforceInstall {ec P P' p}
+      (hinst : policyInstall P p = some P') :
+      Step O ⟨ec, P, .enforce (.polV p)⟩ ⟨ec, P', .unit⟩
 
-  -- L3: Enforce-Heal. When `policyInstall` is undefined for the policy
-  -- value bound to `x`, append the explanation to ε and rewrite the redex
-  -- back to a gen of Tpolicy using the implementation-supplied prompt.
-  | enforceHeal {ρ ec P π x p b}
-      (hb     : Env.lookup ρ x = some b)
-      (hpol   : b.value = .vPol p)
-      (hty    : b.ty = .tPolicy)
-      (_hbad  : policyInstall P p = none)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy π P)]) ≤ retryBudget) :
-      Step O
-        ⟨ρ, ec, P, π, .enforce x⟩
-        ⟨ρ, ec ++ [Event.error (explainPolicy π P)], P, π, .gen .tPolicy (provPrompt ρ x) none⟩
+  -- CBV congruence. Reduces leftmost redex. No stuck-propagation side
+  -- condition is needed: there is no `errTerm` constructor any more —
+  -- stuck configurations have no out-going transition.
 
-  -- CBV left-to-right congruence rules.
-  -- These replace the evaluation contexts E[·] / Extract defunctionalisation
-  -- of earlier drafts: the next redex is always in the leftmost scoring
-  -- position, and congruence reduces under that position.  The `hne`
-  -- side condition forbids propagation of the `errTerm` terminal marker
-  -- through a congruence — a sub-expression that has reached `errTerm`
-  -- stalls the whole program, matching the paper's trace-level fail-fast
-  -- semantics.
+  | letCong {ec ec' P P' τ e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
+      Step O ⟨ec, P, .letE τ e₁ e₂⟩ ⟨ec', P', .letE τ e₁' e₂⟩
 
-  | letCong {ρ ρ' ec ec' P P' π π' m x τ e₁ e₁' e₂}
-      (h   : Step O ⟨ρ, ec, P, π, e₁⟩ ⟨ρ', ec', P', π', e₁'⟩)
-      (hne : ¬ (Config.isErr ⟨ρ', ec', P', π', e₁'⟩)) :
-      Step O
-        ⟨ρ, ec, P, π, .letE m x τ e₁ e₂⟩
-        ⟨ρ', ec', P', π', .letE m x τ e₁' e₂⟩
+  | ifCong {ec ec' P P' e₁ e₁' e₂ e₃}
+      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
+      Step O ⟨ec, P, .ifE e₁ e₂ e₃⟩ ⟨ec', P', .ifE e₁' e₂ e₃⟩
 
-  | assignCong {ρ ρ' ec ec' P P' π π' x e₁ e₁'}
-      (h   : Step O ⟨ρ, ec, P, π, e₁⟩ ⟨ρ', ec', P', π', e₁'⟩)
-      (hne : ¬ (Config.isErr ⟨ρ', ec', P', π', e₁'⟩)) :
-      Step O
-        ⟨ρ, ec, P, π, .assign x e₁⟩
-        ⟨ρ', ec', P', π', .assign x e₁'⟩
+  | seqCong {ec ec' P P' e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
+      Step O ⟨ec, P, .seq e₁ e₂⟩ ⟨ec', P', .seq e₁' e₂⟩
 
-  | ifCong {ρ ρ' ec ec' P P' π π' e₁ e₁' e₂ e₃}
-      (h   : Step O ⟨ρ, ec, P, π, e₁⟩ ⟨ρ', ec', P', π', e₁'⟩)
-      (hne : ¬ (Config.isErr ⟨ρ', ec', P', π', e₁'⟩)) :
-      Step O
-        ⟨ρ, ec, P, π, .ifE e₁ e₂ e₃⟩
-        ⟨ρ', ec', P', π', .ifE e₁' e₂ e₃⟩
+  | forCong {ec ec' P P' e₁ e₁' e₂}
+      (h : Step O ⟨ec, P, e₁⟩ ⟨ec', P', e₁'⟩) :
+      Step O ⟨ec, P, .forE e₁ e₂⟩ ⟨ec', P', .forE e₁' e₂⟩
 
-  | seqCong {ρ ρ' ec ec' P P' π π' e₁ e₁' e₂}
-      (h   : Step O ⟨ρ, ec, P, π, e₁⟩ ⟨ρ', ec', P', π', e₁'⟩)
-      (hne : ¬ (Config.isErr ⟨ρ', ec', P', π', e₁'⟩)) :
-      Step O
-        ⟨ρ, ec, P, π, .seq e₁ e₂⟩
-        ⟨ρ', ec', P', π', .seq e₁' e₂⟩
+  | enforceCong {ec ec' P P' e e'}
+      (h : Step O ⟨ec, P, e⟩ ⟨ec', P', e'⟩) :
+      Step O ⟨ec, P, .enforce e⟩ ⟨ec', P', .enforce e'⟩
 
-  | forCong {ρ ρ' ec ec' P P' π π' x e₁ e₁' e₂}
-      (h   : Step O ⟨ρ, ec, P, π, e₁⟩ ⟨ρ', ec', P', π', e₁'⟩)
-      (hne : ¬ (Config.isErr ⟨ρ', ec', P', π', e₁'⟩)) :
-      Step O
-        ⟨ρ, ec, P, π, .forE x e₁ e₂⟩
-        ⟨ρ', ec', P', π', .forE x e₁' e₂⟩
+  | evalFunCong {ec ec' P P' f f' args}
+      (h : Step O ⟨ec, P, f⟩ ⟨ec', P', f'⟩) :
+      Step O ⟨ec, P, .evalE f args⟩ ⟨ec', P', .evalE f' args⟩
 
 inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C

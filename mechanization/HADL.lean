@@ -7,7 +7,6 @@
 --   T4 Oracle-Relative Safety     — T4a/T4b root, T4c congruence-lifted in HADL.Safety2
 
 import HADL.Syntax
-import HADL.Env
 import HADL.Typing
 import HADL.Policy
 import HADL.Oracle
