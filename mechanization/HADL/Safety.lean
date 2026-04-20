@@ -32,7 +32,7 @@ theorem T4_budget_no_heal
           ∃ v, C' = ⟨ec ++ [Event.success], P, σ, v⟩ := by
   intro C' h
   generalize hE : (Expr.gen τ s π : Expr) = eG at h
-  cases h <;> (try (cases hE; done))
+  cases h <;> try cases hE
   case oracleSuccess a _ _ _ =>
       cases a
       · exact ⟨_, rfl⟩

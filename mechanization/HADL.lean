@@ -18,3 +18,4 @@ import HADL.Lemmas
 import HADL.Soundness
 import HADL.Safety
 import HADL.Safety2
+import HADL.AxiomCheck
