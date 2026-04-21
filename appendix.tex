@@ -170,6 +170,35 @@ None of the congruence rules carries a $\neq \mathsf{err}$ side condition: the l
 
 There is no separate heal rule for $\Enforce{\cdot}$, for $\Agent{\cdot}{\cdot}$, or for closure application: the unified $\rulename{Oracle-Heal-Type}$ and $\rulename{Oracle-Heal-Pol}$ rules in \figr{fig:rules-core} subsume all gen/agent self-healing via the $\mathtt{OAction}$ action tag, and an $\Enforce{\cdot}$ whose policy value fails to install simply gets stuck --- there is no rewind-to-gen fallback in the mechanized semantics. Earlier drafts of the formalization included an $\rulename{Enforce-Heal}$ rule; it has been removed together with the $\mathsf{errTerm}$ constructor that it targeted.
 
+\subsection{Mutable-State Rules}
+\label{app:rules-mut}
+
+The following rules are the only ones that read or write the store $\MStore$; all other rules in \sect{app:rules} leave $\MStore$ unchanged and elide it.
+
+\begin{mathpar}
+\inferrule*[right=\rulename{VarDecl-Cong}]
+  {\MConfig{\MErr}{\MPol}{e_1} \step \MConfig{\MErr'}{\MPol'}{e_1'}}
+  {\MConfigS{\MErr}{\MPol}{\MStore}{\mathtt{var}\;x{:}\tau = e_1\;\mathtt{in}\;e_2} \step \MConfigS{\MErr'}{\MPol'}{\MStore}{\mathtt{var}\;x{:}\tau = e_1'\;\mathtt{in}\;e_2}}
+
+\inferrule*[right=\rulename{VarDecl-Bind}]
+  {\mathsf{isValue}(v) \\ \RtType{v}{\tau}}
+  {\MConfigS{\MErr}{\MPol}{\MStore}{\mathtt{var}\;x{:}\tau = v\;\mathtt{in}\;e_2} \step \MConfigS{\MErr}{\MPol}{\MStore[x \mapsto (\tau,v)]}{e_2}}
+
+\inferrule*[right=\rulename{Assign-Cong}]
+  {\MConfig{\MErr}{\MPol}{e} \step \MConfig{\MErr'}{\MPol'}{e'}}
+  {\MConfigS{\MErr}{\MPol}{\MStore}{x \mathrel{:=} e} \step \MConfigS{\MErr'}{\MPol'}{\MStore}{x \mathrel{:=} e'}}
+
+\inferrule*[right=\rulename{Assign-Write}]
+  {\MStore(x) = (\tau, v_{\mathit{old}}) \\ \mathsf{isValue}(v) \\ \RtType{v}{\tau}}
+  {\MConfigS{\MErr}{\MPol}{\MStore}{x \mathrel{:=} v} \step \MConfigS{\MErr}{\MPol}{\MStore[x \mapsto (\tau,v)]}{\Tunit}}
+
+\inferrule*[right=\rulename{VarRead}]
+  {\MStore(x) = (\tau, v)}
+  {\MConfigS{\MErr}{\MPol}{\MStore}{\mathtt{read}\;x} \step \MConfigS{\MErr}{\MPol}{\MStore}{v}}
+\end{mathpar}
+
+$\rulename{VarDecl-Bind}$ and $\rulename{Assign-Write}$ carry the runtime-type side condition $\RtType{v}{\tau}$, so the store invariant $\forall x,\tau,v.\; \MStore(x) = (\tau, v) \Rightarrow \RtType{v}{\tau}$ (a conjunct of $\WF{\cdot}$) is preserved by every write. $\rulename{VarRead}$ resolves a read through the store and cannot be stuck on a well-formed configuration where the $x$ was declared. Mutable variables are \emph{not} de-Bruijn indices: they use named keys in $\MStore$ and never interact with the capture-avoiding substitution underlying \texttt{let} and closure application.
+
 \section{Proofs of Theorems~\ref{thm:hadl-soundness} and \ref{thm:hadl-progress}}
 \label{app:proofs}
 

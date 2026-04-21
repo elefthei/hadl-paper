@@ -38,10 +38,15 @@
 \newtheorem{remark}{Remark}
 
 %%%%%%%%%%%%% HADL formal model — machine components
-% 3-tuple configuration ⟨Σ, Π, e⟩ (substitution-based core).
+% Four-tuple configuration ⟨Θ, Π, σ, e⟩: heal context, installed policy,
+% mutable store, expression under reduction. \MConfig elides σ (used for
+% rules that leave the store unchanged); \MConfigS shows all four fields
+% (used for the mutable-state rules).
 \newcommand{\MConfig}[3]{\langle #1,\; #2,\; #3 \rangle}
+\newcommand{\MConfigS}[4]{\langle #1,\; #2,\; #3,\; #4 \rangle}
 \newcommand{\MErr}{\Sigma}
 \newcommand{\MPol}{\Pi}
+\newcommand{\MStore}{\sigma}
 \newcommand{\MPrin}{\pi}
 \newcommand{\MRetry}{N}
 \newcommand{\Inst}[2]{#1[#2/0]}
