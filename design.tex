@@ -20,12 +20,12 @@ T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \tex
 e & ::= & s \mid n \mid b \mid x & \textit{literals, vars} \\
   & \mid & \texttt{let}\; x {:} T = e \mid \texttt{var}\; x {:} T = e \mid x = e & \textit{bindings} \\
   & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] \mid \texttt{while}\; (e)\; \{e\} & \\
-  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} \mid e_1 ;\; e_2 \mid e_1 \;\mathit{op}\; e_2 & \\
+  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} \mid e_1 ;\; e_2 & \\
   & \mid & \texttt{ask}\; s \mid \texttt{say}\; s & \textit{I/O} \\
   & \mid & \texttt{gen}\; s\; [\texttt{as}\; (s \mid x)] \mid \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM calls} \\
   & \mid & \texttt{js}\; c \mid \texttt{eval}\; e\;(e_1, \ldots, e_k) \mid \texttt{enforce}\; x &
 \end{array}\]
-\caption{Abstract syntax of \hadl. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names.}
+\caption{Abstract syntax of \hadl. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names. Arrow types are right-associative and curried: $T_1 \to T_2 \to T_3$ denotes $(T_1, T_2) \to T_3$ (an n-ary arrow). Arithmetic and comparison are delegated to \texttt{js} blocks.}
 \label{fig:syntax}
 \end{figure}
 
@@ -36,26 +36,11 @@ e & ::= & s \mid n \mid b \mid x & \textit{literals, vars} \\
 
 The three gradual-validation annotations (\texttt{Schema}, arrow types, \texttt{Policy}) share the same mechanism: static checking treats them as universally compatible (inspired by the unknown type in gradual typing~\cite{siek2006gradual}), and rather than inserting casts, \hadl re-invokes the type checker over downstream code when a concrete value materializes.
 
-\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. Since the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it via the mapping $\sigma$ of Figure~\ref{fig:schema-to-type}, registers it in the type environment, and re-invokes the type checker over the remaining program. A \texttt{Schema}-typed variable can then appear in annotation position (e.g.~\texttt{let booking: form\_schema = gen "..."}). Re-checking after materialization verifies downstream bindings; if it fails and \texttt{@retries} is active, the runtime re-invokes the causal gen call with the type error as feedback.
-
-\begin{figure}[t]
-\small
-\[
-\sigma(\tau) = \begin{cases}
-() & \tau = \texttt{null} \\
-\texttt{Bool} & \tau = \texttt{boolean} \\
-\texttt{Number} & \tau \in \{\texttt{integer},\texttt{number}\} \\
-\texttt{String} & \tau \in \{\texttt{string},\texttt{enum}\} \\
-\texttt{Schema} & \tau \in \{\texttt{array},\texttt{object},\texttt{\$ref}\}
-\end{cases}
-\]
-\caption{The schema-to-type mapping $\sigma$. Compound schemas (arrays, objects, references) remain as \texttt{Schema}.}
-\label{fig:schema-to-type}
-\end{figure}
+\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. Since the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it via a mapping that sends \texttt{null} to \texttt{()}, \texttt{boolean} to \texttt{Bool}, \texttt{integer}/\texttt{number} to \texttt{Number}, \texttt{string}/\texttt{enum} to \texttt{String}, and compound schemas (\texttt{array}/\texttt{object}/\texttt{\$ref}) back to \texttt{Schema}; it then registers the result in the type environment and re-invokes the type checker over the remaining program. A \texttt{Schema}-typed variable can then appear in annotation position (e.g.~\texttt{let booking: form\_schema = gen "..."}). Re-checking after materialization verifies downstream bindings; if it fails and \texttt{@retries} is active, the runtime re-invokes the causal gen call with the type error as feedback.
 
 \paragraph{Gradual workflow generation.} A \texttt{gen} annotated with an arrow type (e.g.~\texttt{(String -> Number)}) instructs the LLM to produce a complete \hadl workflow as structured output. The entire AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program}. \texttt{eval} deserializes, validates, and executes this value within the current interpreter context with closure-like semantics. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM.
 
-\paragraph{Gradual policy generation.} A \texttt{gen} annotated with \texttt{Policy} instructs the LLM to produce a Cedar policy as JSON. Gradual policy generation separates policy \emph{generation} from \emph{activation}: a \texttt{Policy}-annotated binding stores the policy without activating it, and the explicit \texttt{enforce} expression installs it. Because \texttt{enforce} is an ordinary expression, it can appear inside conditional branches, enabling human-in-the-loop approval. Installation enforces a deny-all guard (rejecting blanket \texttt{forbid}), action-type validation, append-only merging (so restrictions accumulate monotonically), and scoped principal validation across \texttt{as} clauses. If a generated policy fails to compile, feedback-driven self-healing re-invokes the causal gen call with the Cedar error.
+\paragraph{Gradual policy generation.} A \texttt{gen} annotated with \texttt{Policy} instructs the LLM to produce a Cedar policy as JSON. Gradual policy generation separates policy \emph{generation} from \emph{activation}: a \texttt{Policy}-annotated binding stores the policy without activating it, and the explicit \texttt{enforce} expression installs it. Because \texttt{enforce} is an ordinary expression, it can appear inside conditional branches, enabling human-in-the-loop approval. Installation enforces (1) a deny-all guard (rejecting blanket \texttt{forbid}), (2) action-type validation delegated to the Cedar parser, and (3) append-only merging, so restrictions accumulate monotonically. Scoped principal validation across \texttt{as} clauses is not an install-time property; it is enforced at invocation time by the Cedar check in $\rulename{Oracle-Success}$. If a generated policy fails to compile, feedback-driven self-healing re-invokes the causal gen call with the Cedar error.
 
 \subsection{Threat Model and Limitations}
 \label{sec:design-threat}
