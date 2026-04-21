@@ -23,7 +23,32 @@ The type system deliberately makes several simplifications to keep gradual valid
   \item \textbf{No parametric polymorphism.} Workflow signatures are monomorphic.
 \end{itemize}
 
-Relaxing these is not required for gradual validation to be sound relative to \sect{sec:semantics}; each corresponds to expressiveness we chose to defer to future work.
+\section{Evaluation Methodology}
+\label{app:eval-method}
+
+\paragraph{Workflow corpus.} The six workflows are the clinical-trial task of \figr{fig:clinical-trial}, the car scorer of \sect{sec:overview}, and four additional tasks: a customer-support triage workflow (\texttt{Schema}, \texttt{Policy}), a code-review agent (arrow type, \texttt{Policy}), a financial-compliance report (\texttt{Schema}, \texttt{Policy}), and a research-paper summarizer (\texttt{Schema}).
+
+\paragraph{Models.} Each workflow is run against three LLMs: GPT-4.1, Claude-Sonnet-4, and the default model exposed by the GitHub Copilot SDK at the time of evaluation. All three are accessed through the same \hadl oracle interface.
+
+\paragraph{Runs.} Each (workflow, model) pair is executed $K$ times with distinct seeds and distinct synthetic user inputs drawn from a per-workflow input template, for a total of $6 \times 3 \times K$ runs. Workflows that depend on human input (\texttt{ask}) are driven by a scripted stub.
+
+\paragraph{Retry budget.} All experiments fix $\MRetry = 3$, matching the \texttt{@retries 3} pragma on Figure~\ref{fig:clinical-trial}.
+
+\paragraph{Error taxonomy.} Every terminating run is classified as one of \emph{success} (reduction reaches a value configuration); \emph{type rejection} ($\rulename{Oracle-Heal-Type}$ consumed the full retry budget at some \texttt{gen} site); \emph{policy rejection} ($\rulename{Oracle-Heal-Pol}$ consumed the full budget); \emph{policy-install failure} (deny-all guard or action-type check rejected an \texttt{enforce} policy after $\MRetry$ retries); or \emph{runtime error} (non-oracle exception: JS engine failure, network error).
+
+\paragraph{Determinism controls.} For each (workflow, model) pair we record the full prompt sequence and the full oracle response trace. This lets us replay a failure deterministically for the post-mortem and makes the token-cost numbers reproducible.
+
+\section{Baseline Comparison Details}
+\label{app:baselines}
+
+Qualitative comparison between \hadl and the three baselines on the clinical-trial workflow.
+
+\begin{description}
+  \item[Language-level type discipline.] \hadl enforces structural types on \texttt{gen} outputs at declaration sites and rechecks after materialization. LangGraph carries no type information between nodes beyond programmer-authored Python annotations. LMQL constrains the \emph{shape} of a single LLM output at decoding time but does not track the type across calls. DSPy's signature syntax is the closest in spirit but operates at the module level, not the workflow level.
+  \item[Per-invocation authorization.] \hadl's \texttt{enforce} + \texttt{as}-clause pattern produces a Cedar check at every \texttt{gen}/\texttt{agent} call site. In the three baselines, authorization is either at the process boundary or authored by hand in the node body; no baseline supports append-only policy merging.
+  \item[Self-healing discipline.] \hadl's retry is driven by the violated constraint itself (type shape, Cedar denial) which is written back into the prompt. DSPy includes a feedback mechanism through its optimizer, but it operates at training time rather than per-invocation. LangGraph and LMQL have no built-in typed retry.
+  \item[Formal guarantees.] \hadl has a mechanized per-step soundness (\sect{sec:sem-correctness}). The baselines have no formal model.
+\end{description}
 
 \section{Full Reduction Rules}
 \label{app:rules}

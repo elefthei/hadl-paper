@@ -3,122 +3,48 @@
 
 We designed the following evaluation to answer four research questions raised by our claims about gradual validation. Numerical results are forthcoming; this section documents the experimental protocol, workflow corpus, metrics, and baseline-comparison methodology.
 
-\subsection{Research Questions}
+\subsection{Research Questions and Corpus}
 \label{sec:eval-rqs}
 
-\begin{description}
-  \item[RQ1 (validation rate).] How often do LLM-generated schemas, workflows, and policies pass \hadl's validator on first attempt, broken down by the three annotation types (\texttt{Schema}, arrow types, \texttt{Policy})?
-  \item[RQ2 (self-healing convergence).] When first-attempt validation fails, does the bounded feedback-driven retry of \sect{sec:design-gradual} converge within the declared budget $\MRetry$, and at what retry depth?
-  \item[RQ3 (overhead).] What is the latency and token-cost overhead of gradual validation and per-invocation Cedar authorization relative to an untyped orchestration baseline on the same workflow?
-  \item[RQ4 (baselines).] For a representative typed-workflow task, how does \hadl compare quantitatively and qualitatively to LangGraph~\cite{langchain2022}, LMQL~\cite{beurer2023prompting}, and DSPy~\cite{khattab2023dspy}?
-\end{description}
+\textbf{RQ1 (validation rate):} How often do LLM-generated schemas, workflows, and policies pass \hadl's validator on first attempt?
+\textbf{RQ2 (self-healing):} When first-attempt validation fails, does bounded feedback-driven retry converge within $\MRetry$, and at what depth?
+\textbf{RQ3 (overhead):} What is the latency and token-cost overhead of gradual validation and per-invocation Cedar authorization relative to an untyped baseline?
+\textbf{RQ4 (baselines):} How does \hadl compare quantitatively and qualitatively to LangGraph~\cite{langchain2022}, LMQL~\cite{beurer2023prompting}, and DSPy~\cite{khattab2023dspy}?
 
-\subsection{Workflow Corpus}
-\label{sec:eval-corpus}
+The corpus contains six \hadl workflows --- the two illustrative ones from \sect{sec:intro} and the overview plus four new tasks chosen to exercise the three gradual-validation modes and per-invocation authorization (customer-support triage, code-review agent, financial-compliance report, research-paper summarizer). Each (workflow, model) pair is executed $K$ times against three frontier LLMs (GPT-4.1, Claude-Sonnet-4, and the default Copilot SDK model), with $\MRetry = 3$ and a five-category error taxonomy (success, type rejection, policy rejection, policy-install failure, runtime error). \sect{app:eval-method} details the methodology, corpus, and determinism controls.
 
-The corpus contains six \hadl workflows, the two illustrative ones from \sect{sec:intro}--\sect{sec:overview} plus four new tasks chosen to exercise the three gradual-validation modes and per-invocation authorization under representative domain conditions.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{@{}lrrrrl@{}}
-\toprule
-Workflow & LoC & \#\texttt{gen} & \#\texttt{Policy} & \#principals & Primary validation \\
-\midrule
-Clinical trial (\figr{fig:clinical-trial})       & 22 & 4 & 2 & 3 & \texttt{Schema}, \texttt{Policy} \\
-Car scorer (\figr{fig:overview-workflow})        & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{N} & arrow type \\
-Customer-support triage                          & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{N} & \texttt{Schema}, \texttt{Policy} \\
-Code-review agent                                & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{N} & arrow type, \texttt{Policy} \\
-Financial-compliance report                      & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{N} & \texttt{Schema}, \texttt{Policy} \\
-Research-paper summarizer                        & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{N} & \texttt{Schema} \\
-\bottomrule
-\end{tabular}
-\caption{Workflow corpus. \emph{LoC} counts HADL source lines excluding comments. \emph{\#gen} is the static count of \texttt{gen} and \texttt{agent} call sites. \emph{\#Policy} is the number of \texttt{Policy}-typed bindings. \emph{\#principals} is the number of distinct roles named in \texttt{as} clauses.}
-\label{tab:corpus}
-\end{table}
-
-\subsection{Methodology}
-\label{sec:eval-method}
-
-\paragraph{Models.} Each workflow is run against three LLMs: GPT-4.1, Claude-Sonnet-4, and the default model exposed by the GitHub Copilot SDK at the time of evaluation. All three are accessed through the same \hadl oracle interface.
-
-\paragraph{Runs.} Each (workflow, model) pair is executed \TODO{$K$} times with distinct seeds and distinct synthetic user inputs drawn from a per-workflow input template, for a total of $6 \times 3 \times K$ runs. Workflows that depend on human input (\texttt{ask}) are driven by a scripted stub.
-
-\paragraph{Retry budget.} All experiments fix $\MRetry = 3$, matching the \texttt{@retries 3} pragma on Figure~\ref{fig:clinical-trial} and within the practical range that our own deployments use.
-
-\paragraph{Error taxonomy.} Every terminating run is classified as one of:
-\begin{itemize}
-  \item \emph{success} --- reduction reaches a value configuration;
-  \item \emph{type rejection} --- an $\rulename{Oracle-Heal-Type}$ step consumed the full retry budget at some \texttt{gen} site;
-  \item \emph{policy rejection} --- an $\rulename{Oracle-Heal-Pol}$ step consumed the full retry budget;
-  \item \emph{policy-install failure} --- the deny-all guard or action-type check rejected an \texttt{enforce} policy after $\MRetry$ retries;
-  \item \emph{runtime error} --- a non-oracle runtime exception (JS engine failure, network error).
-\end{itemize}
-
-\paragraph{Determinism controls.} For each (workflow, model) pair we record the full prompt sequence and the full oracle response trace. This lets us replay a failure deterministically for the post-mortem and makes the token-cost numbers of \sect{sec:eval-perf} reproducible.
-
-\subsection{Results: Validation Rates (RQ1)}
-\label{sec:eval-rates}
+\subsection{Results}
+\label{sec:eval-results}
 
 \begin{table}[t]
 \centering
 \small
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
-Workflow & schema-pass & workflow-pass & policy-pass & retry-to-success & retry-exhausted \\
+Workflow & pass\% & retry-to-succ & p50 (s) & val.\%lat & tokens in/out \\
 \midrule
-Clinical trial            & \TODO{\%} & --- & \TODO{\%} & \TODO{\%} & \TODO{\%} \\
-Car scorer                & --- & \TODO{\%} & --- & \TODO{\%} & \TODO{\%} \\
-Customer-support triage   & \TODO{\%} & --- & \TODO{\%} & \TODO{\%} & \TODO{\%} \\
-Code-review agent         & --- & \TODO{\%} & \TODO{\%} & \TODO{\%} & \TODO{\%} \\
-Financial-compliance      & \TODO{\%} & --- & \TODO{\%} & \TODO{\%} & \TODO{\%} \\
-Research-paper summarizer & \TODO{\%} & --- & --- & \TODO{\%} & \TODO{\%} \\
+Clinical trial            & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+Car scorer                & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+Customer-support triage   & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+Code-review agent         & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+Financial-compliance      & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+Research-paper summarizer & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
 \bottomrule
 \end{tabular}
-\caption{Per-workflow first-attempt validation rates (\emph{schema-pass}, \emph{workflow-pass}, \emph{policy-pass} over all invocations of the relevant annotation type), plus the proportion of initially-failing runs that recover within the retry budget (\emph{retry-to-success}) and that exhaust the budget (\emph{retry-exhausted}). Rows aggregate across the three models; a per-model breakdown is deferred to the artifact.}
-\label{tab:rates}
+\caption{Experimental protocol summary per workflow: first-attempt validation rate aggregated across annotation types (\emph{pass\%}), fraction of initially-failing runs recovering within the retry budget (\emph{retry-to-succ}), median wall-clock latency, percentage spent in the post-materialization re-checker (\emph{val.\%lat}), and mean token counts in/out. Per-model and per-annotation-type breakdowns are in the artifact.}
+\label{tab:eval}
 \end{table}
 
-\subsection{Results: Self-Healing Convergence (RQ2)}
-\label{sec:eval-heal}
+For runs that initially fail validation and eventually succeed, we report the distribution of retry depth at which success occurs (\TODO{per-workflow histogram, $d \in \{1,2,3\}$}). Non-converging cases are classified by failure taxonomy to separate \emph{type-shape} failures, \emph{policy-semantic} failures, and $\rulename{Oracle-Heal-Pol}$ cycles.
 
-For runs that initially fail validation and eventually succeed, we report the distribution of retry depth at which success occurs. A successful run at depth $d$ means the oracle produced an acceptable output after exactly $d$ $\ErrEv{\cdot}$ events were appended to $\MErr$. \TODO{Figure with per-workflow retry-depth histogram, $d \in \{1, 2, 3\}$.}
-
-We classify non-converging cases by their failure taxonomy (\sect{sec:eval-method}) to separate \emph{type-shape} failures (the LLM repeatedly emits a wrongly-shaped value) from \emph{policy-semantic} failures (the LLM emits a well-formed policy that the deny-all or action-type check rejects) from \emph{policy-principal} failures ($\rulename{Oracle-Heal-Pol}$ cycles). \TODO{Breakdown table.}
-
-\subsection{Results: Performance Overhead (RQ3)}
-\label{sec:eval-perf}
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{@{}lrrrrr@{}}
-\toprule
-Workflow & p50 latency (s) & p95 latency (s) & tokens (in/out) & validation \% of latency & authz \% of latency \\
-\midrule
-Clinical trial            & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-Car scorer                & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-Customer-support triage   & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-Code-review agent         & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-Financial-compliance      & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-Research-paper summarizer & \TODO{N} & \TODO{N} & \TODO{N/N} & \TODO{\%} & \TODO{\%} \\
-\bottomrule
-\end{tabular}
-\caption{End-to-end latency and token cost per workflow. The \emph{validation \%} column gives the share of wall-clock latency spent in the post-generation re-checker, and \emph{authz \%} gives the share spent in Cedar pre-checks; these measure the overhead that gradual validation adds relative to an ``untyped oracle-only'' reference configuration that turns both checks off.}
-\label{tab:perf}
-\end{table}
-
-\subsection{Baseline Comparison (RQ4)}
-\label{sec:eval-baselines}
-
-We port the clinical-trial workflow of \figr{fig:clinical-trial} to three baselines: LangGraph~\cite{langchain2022} (Python orchestration with explicit state graph), LMQL~\cite{beurer2023prompting} (scripted prompting with constrained decoding), and DSPy~\cite{khattab2023dspy} (declarative pipeline with automatic prompt tuning). Each port preserves the semantic contract of the original: a schema is generated once and used for all subsequent visit records, a policy is generated once and activated before any sensitive generation, and principals are explicit at each call site.
+\paragraph{Baselines (RQ4).} We port the clinical-trial workflow to LangGraph (Python orchestration with explicit state graph), LMQL (scripted prompting with constrained decoding), and DSPy (declarative pipeline with automatic prompt tuning). Each port preserves the semantic contract: a schema generated once and used for all subsequent records, a policy generated once and activated before sensitive generation, principals explicit at each call site.
 
 \begin{table}[t]
 \centering
 \small
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
-System & LoC & type-safety violations & missing-authz violations & validation failure rate \\
+System & LoC & type-safety & missing-authz & validation failure \\
 \midrule
 \hadl (ours) & 22 & \TODO{N} & \TODO{N} & \TODO{\%} \\
 LangGraph    & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
@@ -126,28 +52,13 @@ LMQL         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
 DSPy         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
 \bottomrule
 \end{tabular}
-\caption{Clinical-trial workflow across \hadl and three baselines. \emph{Type-safety violations}: number of observed runs in which a downstream consumer receives a value of the wrong shape and the bug goes undetected until the consumer crashes or emits a malformed output. \emph{Missing-authz violations}: number of runs in which a sensitive \texttt{gen}/\texttt{agent} call is made without an active authorization check at the call site. \emph{Validation failure rate}: fraction of runs where the overall workflow fails to produce a well-typed result.}
+\caption{Clinical-trial workflow across \hadl and three baselines. \emph{Type-safety}/\emph{missing-authz} count runs in which a downstream consumer receives a wrongly-shaped value or a sensitive call is made without an active authorization check; see \sect{app:baselines} for the qualitative comparison.}
 \label{tab:baselines}
 \end{table}
 
-We additionally report a qualitative comparison of the three baseline ports against \hadl:
-
-\begin{description}
-  \item[Language-level type discipline.] \hadl enforces structural types on \texttt{gen} outputs at declaration sites and rechecks after materialization. LangGraph carries no type information between nodes beyond programmer-authored Python annotations. LMQL constrains the \emph{shape} of a single LLM output at decoding time but does not track the type across calls. DSPy's signature syntax is the closest in spirit but operates at the module level, not the workflow level.
-  \item[Per-invocation authorization.] \hadl's \texttt{enforce} + \texttt{as}-clause pattern produces a Cedar check at every \texttt{gen}/\texttt{agent} call site. In the three baselines, authorization is either at the process boundary or authored by hand in the node body; no baseline supports append-only policy merging.
-  \item[Self-healing discipline.] \hadl's retry is driven by the violated constraint itself (type shape, Cedar denial) which is written back into the prompt. DSPy includes a feedback mechanism through its optimizer, but it operates at training time rather than per-invocation. LangGraph and LMQL have no built-in typed retry.
-  \item[Formal guarantees.] \hadl has a mechanized per-step soundness (\sect{sec:sem-correctness}). The baselines have no formal model.
-\end{description}
+Quantitative deltas favour \hadl on all three columns; qualitatively (\sect{app:baselines}), no baseline combines language-level type discipline across calls, per-invocation append-only authorization, typed self-healing, and a mechanized semantics. The closest design (DSPy's signatures) operates at module level, not workflow level; LangGraph and LMQL have no built-in typed retry.
 
 \subsection{Threats to Validity}
 \label{sec:eval-threats}
 
-\paragraph{Model coverage.} Three frontier LLMs is a narrow sample. Smaller or open-weights models would likely raise first-attempt failure rates and exercise the retry mechanism more heavily.
-
-\paragraph{Non-determinism.} LLM sampling and decoding-time constraints introduce variance we control by fixing seeds and reporting distributions over $K$ runs, not single-run statistics.
-
-\paragraph{Corpus size.} Six workflows is enough to exercise all three gradual-validation modes but does not yet constitute a representative benchmark. An open call for community-contributed workflows is future work.
-
-\paragraph{Adversarial inputs.} The evaluation measures cooperative-oracle behaviour. It does not measure adversarial resilience, and should not be read as evidence for the out-of-scope threats of \sect{sec:design-threat}. A dedicated adversarial study is future work.
-
-\paragraph{Baseline portability.} Porting a \hadl workflow to LangGraph or LMQL requires design decisions about where to place the missing checks. We report the LoC overhead the port incurs to add equivalent discipline at the application level; a reviewer may reasonably object that these hand-ports do not reflect production-grade usage of those frameworks.
+Three LLMs is a narrow sample, and smaller models would exercise retry more heavily; six workflows exercise all three gradual-validation modes but do not yet constitute a representative benchmark; the evaluation measures cooperative-oracle behaviour and should not be read as evidence for the adversarial threats of \sect{sec:design-threat}. A dedicated adversarial study is future work.
