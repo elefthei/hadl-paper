@@ -18,7 +18,6 @@ abbrev Policy : Type := Cedar.Spec.Policies
 inductive Action where
   | gen
   | agent
-  | evalA
   deriving DecidableEq, Repr
 
 /-- Opaque parser for the string form stored in `PolicyValue.mk`.
@@ -34,8 +33,7 @@ def requestOf (π : Principal) (a : Action) : Cedar.Spec.Request :=
   , action    := { ty := { id := "Action",    path := [] },
                    eid := match a with
                           | .gen   => "gen"
-                          | .agent => "agent"
-                          | .evalA => "eval" }
+                          | .agent => "agent" }
   , resource  := { ty := { id := "Resource", path := [] }, eid := "self" }
   , context   := Cedar.Data.Map.empty }
 

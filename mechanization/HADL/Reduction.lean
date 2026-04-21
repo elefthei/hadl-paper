@@ -47,6 +47,12 @@ opaque explainPolicy : OAction → Policy → String
   4-tuple configs carry a mutable-state store `σ`; all existing rules
   thread `σ` unchanged. The three mutable-state constructors
   (`varDecl` / `assign` / `varRead`) add five new rules at the bottom.
+
+  Convention: where the paper writes an explicit `isValue(v)` premise
+  (e.g. `Seq`, `For-Cons`, `Eval-Success`, `Ask`, `letBind`,
+  `oracleSuccess`), the Lean rules enforce it structurally via the
+  `.val v` pattern on `Value`, so the premise is omitted rather than
+  restated.
 -/
 inductive Step (O : Oracle) : Config → Config → Prop where
 
