@@ -31,7 +31,7 @@ Financial-compliance      & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO
 Research-paper summarizer & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
 \bottomrule
 \end{tabular}
-\caption{Experimental protocol summary per workflow: first-attempt validation rate aggregated across annotation types (\emph{pass\%}), fraction of initially-failing runs recovering within the retry budget (\emph{retry-to-succ}), median wall-clock latency, percentage spent in the post-materialization re-checker (\emph{val.\%lat}), and mean token counts in/out. Per-model and per-annotation-type breakdowns are in the artifact.}
+\caption{Per-workflow first-attempt pass rate, retry-to-success fraction, latency, re-checker share, and token counts. Per-model breakdowns are in the artifact.}
 \label{tab:eval}
 \end{table}
 
@@ -52,7 +52,7 @@ LMQL         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
 DSPy         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
 \bottomrule
 \end{tabular}
-\caption{Clinical-trial workflow across \hadl and three baselines. \emph{Type-safety}/\emph{missing-authz} count runs in which a downstream consumer receives a wrongly-shaped value or a sensitive call is made without an active authorization check; see \sect{app:baselines} for the qualitative comparison.}
+\caption{Clinical-trial workflow across \hadl and three baselines; qualitative comparison in \sect{app:baselines}.}
 \label{tab:baselines}
 \end{table}
 

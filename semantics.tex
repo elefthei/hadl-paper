@@ -33,7 +33,7 @@ The reduction relation $C \step C'$ is a single small-step relation parameterize
    \retries{\MErr \cdot \ErrEv{\epsilon}} \le \MRetry}
   {\MConfig{\MErr}{\MPol}{a.e} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{a.e}}
 \end{mathpar}
-\caption{The two oracle rules central to self-healing. $\rulename{Oracle-Success}$ pre-checks the policy, calls the oracle, verifies the runtime type, and on success appends $\SucEv$ --- resetting $\retries{\cdot}$ to zero. $\rulename{Oracle-Heal-Type}$ self-heals by appending an $\ErrEv{\cdot}$ diagnostic and leaving the head in place for retry, provided the budget metric on the enlarged context still fits within $\MRetry$. $\rulename{Oracle-Heal-Pol}$ is symmetric for the policy-rejection case. Congruence rules carry no $\neq \mathsf{err}$ side condition: the language has no $\mathsf{errTerm}$, so stuck configurations fail-fast by absence of transition. See Appendix~\ref{app:rules} for the complete rule set.}
+\caption{The two oracle rules central to self-healing; the complete rule set is in Appendix~\ref{app:rules}.}
 \label{fig:rules-core}
 \end{figure}
 

@@ -33,7 +33,7 @@ workflow clinical_trial() -> String {
   "done"
 }
 \end{lstlisting}
-\caption{A clinical trial workflow. Line~5 produces a \texttt{Schema}; line~6 a \texttt{Policy} activated by \texttt{enforce} on line~8. Every \texttt{gen} on lines~13--15 is typed against the generated schema and authorized against the installed policy under the \texttt{role} principal (line~9). When a serious adverse event occurs, line~20 generates a tighter policy and line~21 merges it append-only, so access rules only tighten. \texttt{@retries 3} enables self-healing: if validation rejects an LLM output, the runtime re-invokes the causal \texttt{gen} call with the violated constraint as feedback.}
+\caption{A clinical-trial workflow combining \texttt{Schema}, \texttt{Policy}, \texttt{enforce}, and \texttt{@retries}-driven self-healing.}
 \label{fig:clinical-trial}
 \end{figure}
 

@@ -6,7 +6,7 @@ This section presents the \hadl type system and the gradual validation mechanism
 \subsection{Syntax}
 \label{sec:design-syntax}
 
-Figure~\ref{fig:syntax} presents the abstract syntax. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the four domain-specific primitives (\texttt{ask}, \texttt{say}, \texttt{gen}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{gen}/\texttt{agent} accepts a string literal or a variable reference for dynamic principal resolution.
+Figure~\ref{fig:syntax} presents the abstract syntax. A program is pragmas followed by declarations; types include base types, \texttt{Schema}, arrow types, \texttt{Policy}, and named references; expressions add to standard imperative constructs the four primitives, \texttt{js} interop, \texttt{eval}, \texttt{enforce}, and comparisons. The \texttt{as} clause on \texttt{gen}/\texttt{agent} accepts a string literal or a variable for dynamic principal resolution.
 
 \begin{figure}[t]
 \[\begin{array}{rcll}
@@ -34,7 +34,7 @@ e & ::= & s \mid n \mid b \mid x & \textit{literals, vars} \\
 \subsection{Gradual Validation}
 \label{sec:design-gradual}
 
-\hadl addresses the dynamic nature of LLM outputs through \emph{gradual validation}: three annotations (\texttt{Schema}, arrow types, \texttt{Policy}) signal that the annotated value will be generated at runtime. \texttt{Schema} is treated as universally compatible during static checking, inspired by the unknown type in gradual typing~\cite{siek2006gradual}, but rather than inserting casts, \hadl re-invokes the type checker over downstream code when a concrete type materializes. All three forms share feedback-driven self-healing that retries the causal gen call if validation fails.
+The three gradual-validation annotations (\texttt{Schema}, arrow types, \texttt{Policy}) share the same mechanism: static checking treats them as universally compatible (inspired by the unknown type in gradual typing~\cite{siek2006gradual}), and rather than inserting casts, \hadl re-invokes the type checker over downstream code when a concrete value materializes.
 
 \paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. Since the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it via the mapping $\sigma$ of Figure~\ref{fig:schema-to-type}, registers it in the type environment, and re-invokes the type checker over the remaining program. A \texttt{Schema}-typed variable can then appear in annotation position (e.g.~\texttt{let booking: form\_schema = gen "..."}). Re-checking after materialization verifies downstream bindings; if it fails and \texttt{@retries} is active, the runtime re-invokes the causal gen call with the type error as feedback.
 

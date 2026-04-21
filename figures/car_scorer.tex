@@ -54,6 +54,6 @@ workflow score(car: car_schema)
 \end{lstlisting}
 \subcaption{Generated workflow.}
 \end{subfigure}
-\caption{A car recommendation workflow illustrating gradual validation for workflow generation. The outer workflow (left) asks the LLM to produce the scorer (right) with workflow type \texttt{(car\_schema -> Number)}, which is then invoked via \texttt{eval} on each of three schema-typed cars.}
+\caption{Car-recommendation outer workflow (left) generates the scorer (right) via arrow-typed \texttt{gen}; see \sect{app:overview-example}.}
 \label{fig:overview-workflow}
 \end{figure}
