@@ -5,6 +5,31 @@
 
 This appendix lists the reduction rules elided from \sect{sec:sem-reduction} --- the remaining pure-core root rules, the ask/say rules, closure application, and the structural congruence rules --- followed by the proofs of Theorems~\ref{thm:hadl-soundness}, \ref{thm:hadl-progress}, and \ref{thm:hadl-term}. Left-to-right call-by-value evaluation order is enforced throughout by the structural congruence rules. The substitution $\Inst{e}{v}$ denotes the capture-avoiding instantiation of de-Bruijn index $0$ in $e$ with the value $v$ (decrementing all other free indices); for a closure body with $n$ binders, simultaneous substitution $e[v_0/0,\dots,v_{n-1}/(n{-}1)]$ is used.
 
+\subsection{Let-Bind, Enforce-Install, and the Oracle Rules}
+\label{app:rules-oracle}
+
+\begin{mathpar}
+\inferrule*[right=\rulename{Let-Bind}]
+  {\mathsf{isValue}(v) \\ \RtType{v}{\tau}}
+  {\MConfig{\MErr}{\MPol}{\Let{\tau}{v}{e}} \step \MConfig{\MErr}{\MPol}{\Inst{e}{v}}}
+
+\inferrule*[right=\rulename{Let-Cong}]
+  {\MConfig{\MErr}{\MPol}{e_1} \step \MConfig{\MErr'}{\MPol'}{e_1'}}
+  {\MConfig{\MErr}{\MPol}{\Let{\tau}{e_1}{e_2}} \step \MConfig{\MErr'}{\MPol'}{\Let{\tau}{e_1'}{e_2}}}
+
+\inferrule*[right=\rulename{Enforce-Install}]
+  {\Install{\MPol}{p} = \MPol'}
+  {\MConfig{\MErr}{\MPol}{\Enforce{p}} \step \MConfig{\MErr}{\MPol'}{\Tunit}}
+
+\inferrule*[right=\rulename{Oracle-Heal-Pol}]
+  {\lnot\,\PolOk{\MPol}{a.\MPrin}{a.\mathsf{eff}} \\
+   \epsilon = \Explain{a.\MPrin}{\MPol} \\
+   \retries{\MErr \cdot \ErrEv{\epsilon}} \le \MRetry}
+  {\MConfig{\MErr}{\MPol}{a.e} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{a.e}}
+\end{mathpar}
+
+$\rulename{Oracle-Success}$ and $\rulename{Oracle-Heal-Type}$ appear in \figr{fig:rules-core}. The action tag $a$ projects $a.s$ (statement), $a.\tau$ (expected type, $\Tstring$ for agent), $a.\MPrin$ (principal), $a.\mathsf{eff} \in \{\texttt{gen},\texttt{agent}\}$, and $a.e$ (expression head). The budget metric $\retries{\MErr}$ is the length of the trailing $\ErrEv{\cdot}$ run since the most recent $\SucEv$, so a successful oracle step resets it to zero. $\Install{\MPol}{p}$ bundles the deny-all guard, action-type validation, and append-only merge; $\mathtt{policyInstall\_shrinks}$ guarantees $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
+
 \subsection{Pure Core (L1)}
 \label{app:rules-core}
 
@@ -88,7 +113,7 @@ None of the congruence rules carries a $\neq \mathsf{err}$ side condition: the l
 
 There is no separate heal rule for $\Enforce{\cdot}$, for $\Agent{\cdot}{\cdot}$, or for closure application: the unified $\rulename{Oracle-Heal-Type}$ and $\rulename{Oracle-Heal-Pol}$ rules in \figr{fig:rules-core} subsume all gen/agent self-healing via the $\mathtt{OAction}$ action tag, and an $\Enforce{\cdot}$ whose policy value fails to install simply gets stuck --- there is no rewind-to-gen fallback in the mechanized semantics. Earlier drafts of the formalization included an $\rulename{Enforce-Heal}$ rule; it has been removed together with the $\mathsf{errTerm}$ constructor that it targeted.
 
-\section{Proofs of Theorems~\ref{thm:hadl-soundness}--\ref{thm:hadl-term}}
+\section{Proofs of Theorems~\ref{thm:hadl-soundness} and \ref{thm:hadl-progress}}
 \label{app:proofs}
 
 Each proof is an induction on the derivation of $C \step C'$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization is free of user-introduced axioms: $\mathtt{policyInstall\_shrinks}$ is proved by iterated application of Cedar-Lean's $\mathtt{unchanged\_deny\_when\_add\_forbid}$ theorem, and the JavaScript host evaluator is modelled by an opaque $\mathtt{jsEval} : \mathtt{JsExpr} \to \mathsf{Option}\;\mathtt{Expr}$. All theorems depend only on Lean's standard meta-axioms ($\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$); no other steps are admitted.
@@ -134,6 +159,12 @@ Fix an oracle redex $a.e$ (either $\Gen{\tau}{s}{\MPrin}$ or $\Agent{s}{\MPrin}$
 These are wrappers around T4b: they add $\PolOk{\MPol}{\MPrin}{a.\mathsf{eff}}$ as an explicit hypothesis and take a direct oracle witness $\exists v.\ \mathsf{isValue}(v) \wedge \RtType{v}{\tau} \wedge \Oracle{s}{\MErr}{\tau} \ni v$ at the caller's \emph{current} heal context. The conclusion $\exists C'.\ C \step C'$ follows by applying $\rulename{Oracle-Success}$ exactly as in T4b but without the intermediate ``reach some $\MErr'$'' step. Mechanized as $\mathtt{T4\_progress\_gen}$ / $\mathtt{T4\_progress\_agent}$ in \texttt{Safety2.lean}.
 
 \subsection{Termination}
-\label{app:proof-term}
+\label{app:term}
 
-This argument is on paper. Between two successive oracle firings, only pure-core and congruence rules fire. Pure-core reduction terminates on any expression whose $\texttt{while}$ and $\texttt{for}$ loops terminate (assumed of $e_0$); substitution is finitary and preserves the termination measure on loop-free code. At each oracle firing either $\SucEv$ is appended (resetting $\retries{\cdot}$ to $0$ by T1) or an $\ErrEv{\cdot}$ extends the trailing retry run by one. After at most $\MRetry + 1$ heals the configuration is either pushed into the ``budget exceeded'' regime of T4a --- where only $\rulename{Oracle-Success}$ can fire, so the configuration is either truthful-success-progressing or stuck by absence of transition --- or has already succeeded. Under eventually-truthful $\mathcal{O}$, truthful-success is guaranteed at every site; since the number of oracle sites reached along the trace is finite (bounded by $|e_0|$ plus finitely many $\rulename{Eval-Success}$ expansions), the trace terminates in a value configuration. Otherwise the trace either terminates in a value or gets stuck at an oracle redex for which no witness is ever produced; no ill-formed configuration, and no $\mathsf{errTerm}$ marker, is ever reached, since neither exists in the language.
+\begin{theorem}[Termination]
+\label{thm:hadl-term}
+Let $C_0 = \MConfig{\emptyset}{\MPol_0}{e_0}$ be a well-formed initial configuration. Assume every \texttt{while}/\texttt{for} loop in $e_0$ terminates. Then every trace from $C_0$ either reaches a value configuration in finitely many steps or gets stuck at some oracle redex whose retry budget has been exhausted without a truthful response --- with no ill-formed intermediate configuration and no terminal-error marker. If $\mathcal{O}$ is eventually-truthful at every oracle site encountered along the trace, the trace terminates in a value configuration.
+\end{theorem}
+
+\label{app:proof-term}
+The argument is on paper. Between two successive oracle firings, only pure-core and congruence rules fire. Pure-core reduction terminates on any expression whose $\texttt{while}$ and $\texttt{for}$ loops terminate (assumed of $e_0$); substitution is finitary and preserves the termination measure on loop-free code. At each oracle firing either $\SucEv$ is appended (resetting $\retries{\cdot}$ to $0$ by T1) or an $\ErrEv{\cdot}$ extends the trailing retry run by one. After at most $\MRetry + 1$ heals the configuration is either pushed into the ``budget exceeded'' regime of T4a --- where only $\rulename{Oracle-Success}$ can fire, so the configuration is either truthful-success-progressing or stuck by absence of transition --- or has already succeeded. Under eventually-truthful $\mathcal{O}$, truthful-success is guaranteed at every site; since the number of oracle sites reached along the trace is finite (bounded by $|e_0|$ plus finitely many $\rulename{Eval-Success}$ expansions), the trace terminates in a value configuration. Otherwise the trace either terminates in a value or gets stuck at an oracle redex for which no witness is ever produced; no ill-formed configuration, and no $\mathsf{errTerm}$ marker, is ever reached, since neither exists in the language.

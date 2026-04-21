@@ -1,73 +1,23 @@
 \section{Formal Model}
 \label{sec:semantics}
 
-This section gives an operational semantics for \hadl that alternates evaluation, type checking, and policy checking, with self-healing when any check fails. The central challenge is stating what \emph{correctness} means for a language whose types, workflows, and authorization policies materialize at runtime and whose reduction deliberately visits ill-typed intermediate states during self-heal. We address this by (i) parameterizing over a non-deterministic oracle, (ii) giving a substitution-based de-Bruijn core so that materialized values flow through the program by $\beta$-reduction rather than through a typed environment, and (iii) stating soundness relative to an oracle that is eventually-truthful within the declared retry budget.
+This section gives an operational semantics for \hadl that alternates evaluation, type checking, and policy checking, with self-healing when any check fails. Types, workflows, and authorization policies materialize at runtime and reduction deliberately visits ill-typed intermediate states during self-heal, so we (i) parameterize over a non-deterministic oracle, (ii) give a substitution-based de-Bruijn core so that materialized values flow by $\beta$-reduction rather than through a typed environment, and (iii) state soundness relative to an oracle that is eventually-truthful within the declared retry budget.
 
-\subsection{Machine Configuration}
+\subsection{Machine Configuration and Judgments}
 \label{sec:sem-config}
 
-A \hadl configuration is a three-tuple
-\[
-  C \;=\; \MConfig{\MErr}{\MPol}{e}
-\]
-whose components are summarized in \figr{fig:config}. The current principal $\MPrin$ is no longer a top-level configuration component: it lives inside the $\Gen{\tau}{s}{\MPrin}$, $\Agent{s}{\MPrin}$, and closure-application syntax, inherited from the surrounding \texttt{as} clause or defaulted at parse time.
+A \hadl configuration is a three-tuple $C = \MConfig{\MErr}{\MPol}{e}$ where $\MErr$ is an append-only \emph{heal context} of events --- each either $\ErrEv{\epsilon}$ carrying failed-attempt feedback or $\SucEv$ marking success --- whose retry metric $\retries{\MErr}$ is the length of the trailing $\ErrEv{\cdot}$ run; $\MPol$ is the installed Cedar policy, updated only by $\Enforce{v}$ via an append-only merge that only tightens; and $e$ is the expression under reduction. The current principal lives inside the $\Gen{\tau}{s}{\MPrin}$, $\Agent{s}{\MPrin}$, and closure-application syntax. Expressions use de-Bruijn indices and carry their own binders; values are the subset satisfying $\mathsf{isValue}$ (base literals, records, arrays, schema values $\Tschema(\tau)$, Cedar policy values, closures).
 
-\begin{figure}[t]
-\centering
-\begin{tabular}{@{}ll@{}}
-\toprule
-Component & Meaning \\
-\midrule
-$\MErr$ & Heal context: append-only log of events, each either $\ErrEv{\epsilon}$ \\
-  & carrying feedback from a failed oracle attempt, or $\SucEv$ marking \\
-  & a successful materialization. The retry metric $\retries{\MErr}$ is \\
-  & the length of the trailing run of $\ErrEv{\cdot}$ events. \\
-$\MPol$ & Installed Cedar policy. Updated by $\Enforce{v}$ via append-only \\
-  & merge; only tightens. \\
-$e$ & Expression under reduction (de-Bruijn indices, CBV). \\
-\bottomrule
-\end{tabular}
-\caption{Components of a \hadl machine configuration.}
-\label{fig:config}
-\end{figure}
-
-Expressions use de-Bruijn indices and carry their own binders: $\Let{\tau}{e_1}{e_2}$ binds one variable in $e_2$, $\Forr{e_1}{e_2}$ binds the iteration variable in $e_2$, and a closure $\Clos{n}{\text{body}}$ binds $n$ positional arguments in its body. Values are the subset of expressions satisfying a syntactic $\mathsf{isValue}$ predicate: base literals, records, arrays, schema values $\Tschema(\tau)$ reifying a concrete type at runtime, Cedar policy values, and closures. CBV reduction is driven to the leftmost sub-term by explicit structural-congruence rules (\S\ref{sec:sem-reduction}).
-
-\subsection{Judgments}
-\label{sec:sem-judgments}
-
-The formal model uses three judgments. Static typing is black-boxed.
-
-\paragraph{Runtime typing} $\RtType{v}{\tau}$ holds when the closed value $v$ has type $\tau$. The judgment is \emph{envless}: because reduction substitutes materialized values into their binders, every value we ever runtime-type-check is closed. Base cases cover the literal constructors ($\Tunit$, booleans, integers, strings, $\Tschema$, $\Tpolicy$); closure, record, and array values are assigned \emph{some} runtime type of the appropriate shape.
-
-\paragraph{Residual static typing} The structural type system of \hadl is re-invoked at runtime after every materialization, exactly as it was invoked at compile time on the source. We treat it as a black-box oracle here: the mechanization in Lean exposes only the reflexivity cases that the Soundness theorem actually uses ($\Tschema$ wildcard and value wildcard).
-
-\paragraph{Policy authorization} $\PolOk{\MPol}{\MPrin}{a}$ holds when Cedar policy $\MPol$ permits action $a \in \{\texttt{gen},\texttt{agent}\}$ for principal $\MPrin$. It is the Cedar decision procedure lifted into our judgment language.
-
-\paragraph{Configuration well-formedness} $\WF{C}$ holds when $\retries{\MErr} \le \MRetry$. Both invariants of the previous formalization --- environment well-typedness and residual typeability --- have moved into the reduction rules themselves: $\rulename{Let-Bind}$ and $\rulename{Oracle-Success}$ carry their own $\RtType{\cdot}{\cdot}$ side conditions, and substitution composes them.
+Four judgments drive correctness. \emph{Runtime typing} $\RtType{v}{\tau}$ holds of closed values (substitution keeps every checked value closed). \emph{Residual static typing} is black-boxed: it is re-invoked at runtime after every materialization exactly as at compile time; only the reflexivity cases the soundness proof uses are exposed. \emph{Policy authorization} $\PolOk{\MPol}{\MPrin}{a}$ lifts the Cedar decision procedure for $a \in \{\texttt{gen},\texttt{agent}\}$. \emph{Well-formedness} $\WF{C}$ is just $\retries{\MErr} \le \MRetry$; residual typeability and environment well-typedness now live inside the reduction rules as $\RtType{\cdot}{\cdot}$ side conditions that substitution composes.
 
 \subsection{Reduction}
 \label{sec:sem-reduction}
 
-The reduction relation $C \step C'$ is a single small-step relation parameterized by the oracle $\mathcal{O}$. Two kinds of rules: \emph{root-level} rules that fire when the top of $e$ matches the rule head, and \emph{structural congruence} rules that drive reduction to the leftmost sub-term at each compound construct (one per binder: let, if, seq, for, enforce, and the function position of closure application). Let-binding is $\beta$-reduction at de-Bruijn index $0$: $\rulename{Let-Bind}$ rewrites $\Let{\tau}{v}{e}$ to $\Inst{e}{v}$, the capture-avoiding substitution that replaces $\mathrm{var}\;0$ by $v$ and decrements every other free index. Closure application by $\rulename{Eval-Success}$ performs the analogous simultaneous substitution at all $n$ binders of the closure body. Policy installation is a root rule and propagates via $\rulename{Enforce-Cong}$.
+The reduction relation $C \step C'$ is a single small-step relation parameterized by the oracle $\mathcal{O}$, split between \emph{root-level} rules that fire when the top of $e$ matches and \emph{structural congruence} rules that drive reduction to the leftmost sub-term under CBV. Let-binding is $\beta$-reduction at de-Bruijn index $0$: $\rulename{Let-Bind}$ rewrites $\Let{\tau}{v}{e}$ to $\Inst{e}{v}$, the capture-avoiding substitution replacing $\mathrm{var}\;0$ by $v$; closure application $\rulename{Eval-Success}$ performs the analogous simultaneous substitution. The three oracle rules --- $\rulename{Oracle-Success}$, $\rulename{Oracle-Heal-Type}$, $\rulename{Oracle-Heal-Pol}$ --- are shared between $\texttt{gen}$ and $\texttt{agent}$ via an action tag $a \in \{\texttt{gen}(\tau,s,\MPrin),\texttt{agent}(s,\MPrin)\}$ that projects the statement, expected type, principal, effect tag, and expression head. The full rule set (pure core, ask/say, closure application, structural congruence) is in Appendix~\ref{app:rules}; \figr{fig:rules-core} shows the two most novel rules.
 
-The three oracle rules --- $\rulename{Oracle-Success}$, $\rulename{Oracle-Heal-Type}$, $\rulename{Oracle-Heal-Pol}$ --- are shared between $\texttt{gen}$ and $\texttt{agent}$ via an action tag $a \in \{\texttt{gen}(\tau,s,\MPrin),\texttt{agent}(s,\MPrin)\}$ that projects a statement $a.s$, an expected type $a.\tau$ (equal to $\Tstring$ for agent), a principal $a.\MPrin$, an effect tag $a.\mathsf{eff} \in \{\texttt{gen},\texttt{agent}\}$, and an expression head $a.e$ (the $\Gen{\tau}{s}{\MPrin}$ or $\Agent{s}{\MPrin}$ term).
-
-\begin{figure*}[t]
+\begin{figure}[t]
 \small
 \begin{mathpar}
-\inferrule*[right=\rulename{Let-Bind}]
-  {\mathsf{isValue}(v) \\ \RtType{v}{\tau}}
-  {\MConfig{\MErr}{\MPol}{\Let{\tau}{v}{e}} \step \MConfig{\MErr}{\MPol}{\Inst{e}{v}}}
-
-\inferrule*[right=\rulename{Let-Cong}]
-  {\MConfig{\MErr}{\MPol}{e_1} \step \MConfig{\MErr'}{\MPol'}{e_1'}}
-  {\MConfig{\MErr}{\MPol}{\Let{\tau}{e_1}{e_2}} \step \MConfig{\MErr'}{\MPol'}{\Let{\tau}{e_1'}{e_2}}}
-
-\inferrule*[right=\rulename{Enforce-Install}]
-  {\Install{\MPol}{p} = \MPol'}
-  {\MConfig{\MErr}{\MPol}{\Enforce{p}} \step \MConfig{\MErr}{\MPol'}{\Tunit}}
-
 \inferrule*[right=\rulename{Oracle-Success}]
   {\PolOk{\MPol}{a.\MPrin}{a.\mathsf{eff}} \\
    \Oracle{a.s}{\MErr}{a.\tau} \ni v \\
@@ -82,81 +32,39 @@ The three oracle rules --- $\rulename{Oracle-Success}$, $\rulename{Oracle-Heal-T
    \epsilon = \Explain{v}{a.\tau} \\
    \retries{\MErr \cdot \ErrEv{\epsilon}} \le \MRetry}
   {\MConfig{\MErr}{\MPol}{a.e} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{a.e}}
-
-\inferrule*[right=\rulename{Oracle-Heal-Pol}]
-  {\lnot\,\PolOk{\MPol}{a.\MPrin}{a.\mathsf{eff}} \\
-   \epsilon = \Explain{a.\MPrin}{\MPol} \\
-   \retries{\MErr \cdot \ErrEv{\epsilon}} \le \MRetry}
-  {\MConfig{\MErr}{\MPol}{a.e} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{a.e}}
 \end{mathpar}
-\caption{Selected reduction rules (the remaining pure-core root rules, $\rulename{Eval-Success}$, and the other structural congruence rules appear in Appendix~\ref{app:rules}). Root rules fire when $e$ matches the rule head at the root; structural congruence rules push reduction to the leftmost sub-term under CBV. Unlike the environment-based formalization, congruence rules carry \emph{no} side condition on the inner residual: there is no $\mathsf{errTerm}$ constructor, so a stuck configuration simply has no outgoing transition. $\rulename{Oracle-Success}$ pre-checks the policy, calls the oracle, and verifies the runtime type, all as side conditions; only if all three succeed does the step fire, appending a $\SucEv$ event to $\MErr$ and replacing the head with the value $v$. $\rulename{Oracle-Heal-Type}$ and $\rulename{Oracle-Heal-Pol}$ self-heal by appending $\ErrEv{\cdot}$ feedback to $\MErr$ and keeping the head unchanged, so the next step retries with the enlarged feedback log visible to the oracle. The budget metric $\retries{\MErr}$ is the length of the trailing $\ErrEv{\cdot}$ run since the most recent $\SucEv$ (or the start), so a successful oracle step resets it to zero. The install operation $\Install{\MPol}{p}$ bundles the deny-all guard, action-type validation, and append-only merge; the Lean lemma $\mathtt{policyInstall\_shrinks}$ guarantees $\Allow{\MPol'} \subseteq \Allow{\MPol}$.}
+\caption{The two oracle rules central to self-healing. $\rulename{Oracle-Success}$ pre-checks the policy, calls the oracle, verifies the runtime type, and on success appends $\SucEv$ --- resetting $\retries{\cdot}$ to zero. $\rulename{Oracle-Heal-Type}$ self-heals by appending an $\ErrEv{\cdot}$ diagnostic and leaving the head in place for retry, provided the budget metric on the enlarged context still fits within $\MRetry$. $\rulename{Oracle-Heal-Pol}$ is symmetric for the policy-rejection case. Congruence rules carry no $\neq \mathsf{err}$ side condition: the language has no $\mathsf{errTerm}$, so stuck configurations fail-fast by absence of transition. See Appendix~\ref{app:rules} for the complete rule set.}
 \label{fig:rules-core}
-\end{figure*}
+\end{figure}
 
-\paragraph{L1: pure core.} $\rulename{Let-Bind}$, $\rulename{If-True}$/$\rulename{If-False}$, $\rulename{While}$, $\rulename{For-Nil}$/$\rulename{For-Cons}$, $\rulename{Js}$, $\rulename{Seq}$, $\rulename{Ask}$, $\rulename{Say}$, and $\rulename{Enforce-Install}$ form a standard call-by-value small-step relation. $\rulename{Let-Bind}$ and $\rulename{For-Cons}$ use $\beta$-reduction to bind the loop variable: $\rulename{For-Cons}$ rewrites $\Forr{v :: vs}{e}$ to $\Seq{\Inst{e}{v}}{\Forr{vs}{e}}$, substituting the head element into the body. Reduction drives to the leftmost sub-term via the structural congruence rules $\rulename{Let-Cong}$, $\rulename{If-Cong}$, $\rulename{Seq-Cong}$, $\rulename{For-Cong}$, $\rulename{Enforce-Cong}$, $\rulename{Eval-Fun-Cong}$ (the function position of closure application). None of them carries a $\neq \mathsf{err}$ side condition because the language has no $\mathsf{errTerm}$ constructor: stuck configurations are genuinely stuck --- they have no outgoing transition and fail-fast by absence.
-
-\paragraph{L2: oracle layer.} When the leftmost redex is an oracle head $\Gen{\tau}{s}{\MPrin}$ or $\Agent{s}{\MPrin}$, the three oracle rules fire at the root. $\rulename{Oracle-Success}$ runs three side conditions --- a policy pre-check, an oracle call, and a runtime-type check --- and on success replaces the head with the value $v$, appending a $\SucEv$ to $\MErr$. When the head sits under a binder (e.g.~$\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{e'}$), a subsequent $\rulename{Let-Bind}$ step substitutes $v$ into $e'$ by $\beta$-reduction; the residual is re-type-checked implicitly as the static checker is re-invoked after each materialization. $\rulename{Oracle-Heal-Type}$ and $\rulename{Oracle-Heal-Pol}$ handle type and policy rejection symmetrically by appending an $\ErrEv{\cdot}$ diagnostic and leaving the head in place for retry.
-
-\paragraph{L3: policy layer.} $\rulename{Enforce-Install}$ is a root rule that propagates to any position through $\rulename{Enforce-Cong}$. It acts directly on a policy value $p = \Tpolicy(\cdot)$ at the head (so an outer $\Enforce{e}$ waits for its argument to reduce to a value); the install operation rejects any blanket $\texttt{forbid}$ policy under the deny-all guard, rejects unknown action types, and merges rules append-only. The allow-set shrinkage is an algebraic consequence of the install operation (mechanized as $\mathtt{policyInstall\_shrinks}$), not an extra side condition.
+The pure-core rules ($\rulename{If-True/False}$, $\rulename{While}$, $\rulename{For-Nil/Cons}$, $\rulename{Js}$, $\rulename{Seq}$, $\rulename{Ask}$, $\rulename{Say}$, $\rulename{Enforce-Install}$) form a standard CBV relation; $\rulename{For-Cons}$ uses $\beta$-reduction to bind the iteration variable. $\rulename{Enforce-Install}$ acts on a policy value at the head; the install operation rejects blanket $\texttt{forbid}$ under a deny-all guard, rejects unknown action types, and merges rules append-only. Allow-set shrinkage ($\Allow{\MPol'} \subseteq \Allow{\MPol}$) is an algebraic consequence of install, mechanized as $\mathtt{policyInstall\_shrinks}$.
 
 \subsection{Correctness}
 \label{sec:sem-correctness}
 
-Classical progress and preservation do not apply directly because \hadl types are runtime values, policies evolve, and self-heal steps deliberately visit ill-typed configurations. We decompose what \emph{is} preserved into four per-step theorems, all parameterized by the oracle --- three \emph{Soundness} components (well-formedness preservation, staged materialization, policy monotonicity) plus \emph{Progress} for oracle redexes --- and then argue \emph{Termination} on paper.
+Classical progress and preservation do not apply directly: types are runtime values, policies evolve, and heal steps deliberately visit ill-typed configurations. We decompose what \emph{is} preserved into three per-step \emph{Soundness} components plus \emph{Progress} for oracle redexes, all parameterized by the oracle, and argue \emph{Termination} on paper.
 
 \begin{definition}[Eventually-truthful oracle]
 \label{def:oracle-truthful}
 An oracle $\mathcal{O}$ is \emph{eventually-truthful at budget $\MRetry$} for a site $(s,\tau)$ if there exists a heal context $\MErr$ with $\retries{\MErr} \le \MRetry$ and a value $v$ satisfying both $\Oracle{s}{\MErr}{\tau} \ni v$ and $\RtType{v}{\tau}$.
 \end{definition}
 
-This matches the existential shape of the Lean predicate $\mathtt{Oracle.eventuallyTruthful}$: it witnesses some well-typed response at \emph{some} heal context, not necessarily the caller's current $\MErr$. Progress for $\texttt{gen}$ therefore concludes $\exists \MErr'\, C'.\;C_0[\MErr := \MErr'] \step C'$.
+This matches the existential shape of the Lean predicate $\mathtt{Oracle.eventuallyTruthful}$: it witnesses some well-typed response at \emph{some} heal context, not the caller's current $\MErr$.
 
 \begin{theorem}[Soundness]
 \label{thm:hadl-soundness}
 For any oracle $\mathcal{O}$ and any step $C \step C'$:
-\begin{enumerate}
-  \item[\textbf{T1}] \emph{WF-preservation.} $\WF{C} \Rightarrow \WF{C'}$ --- equivalently, $\retries{\MErr} \le \MRetry$ is preserved.
-  \item[\textbf{T2}] \emph{Staged materialization.} If $C' = \MConfig{\MErr'}{\MPol'}{v}$ with $\mathsf{isValue}(v)$, then $\exists \tau.\ \RtType{v}{\tau}$.
-  \item[\textbf{T3}] \emph{Policy monotonicity.} $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
-\end{enumerate}
+(\textbf{T1}, WF-preservation) $\WF{C} \Rightarrow \WF{C'}$; (\textbf{T2}, staged materialization) if $C' = \MConfig{\MErr'}{\MPol'}{v}$ with $\mathsf{isValue}(v)$, then $\exists \tau.\ \RtType{v}{\tau}$; (\textbf{T3}, policy monotonicity) $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
 \end{theorem}
 
-\begin{remark}
-T2 (``every reduced value has \emph{some} runtime type'') is stronger than the old materialization-correctness clause and forces the mechanization to assign runtime types to closures, record values, and array values as well --- via dedicated $\mathtt{vClos}$, $\mathtt{vRec}$, and $\mathtt{vArr}$ constructors of $\mathtt{RtType}$ that black-box the structural content. The value that $\rulename{Oracle-Success}$ produces at the annotated type $\tau$ is still witnessed precisely by the rule's $\RtType{v}{\tau}$ premise; T2 only claims existence.
-\end{remark}
+T2 forces the mechanization to assign runtime types to closures, records, and arrays via dedicated $\mathtt{vClos}/\mathtt{vRec}/\mathtt{vArr}$ constructors that black-box structural content; the $\RtType{v}{a.\tau}$ premise of $\rulename{Oracle-Success}$ still witnesses the annotated type at oracle materialization.
 
 \begin{theorem}[Progress for oracle redexes]
 \label{thm:hadl-progress}
-Let $C = \MConfig{\MErr}{\MPol}{e}$ with $\WF{C}$ and $e = \Gen{\tau}{s}{\MPrin}$ (resp.\ $\Agent{s}{\MPrin}$).
-\begin{enumerate}
-  \item[\textbf{T4a}] \emph{Budget exhaustion, no heal.} If $\retries{\MErr} > \MRetry$, then no $\rulename{Oracle-Heal-*}$ rule fires from $C$; every transition from $C$ is an $\rulename{Oracle-Success}$ step to $\MConfig{\MErr \cdot \SucEv}{\MPol}{v}$ for some value $v$.
-  \item[\textbf{T4b}] \emph{Truthful success.} If $\PolOk{\MPol}{\MPrin}{a.\mathsf{eff}}$ and $\mathcal{O}$ is eventually-truthful at $(s,\tau)$ (\defn{def:oracle-truthful}), then $\exists \MErr'\, C'.\ \MConfig{\MErr'}{\MPol}{e} \step C'$ via $\rulename{Oracle-Success}$.
-  \item[\textbf{T4c}] \emph{Progress-gen / Progress-agent.} For the same $C$ with $\PolOk{\MPol}{\MPrin}{a.\mathsf{eff}}$ and a direct oracle witness $\exists v.\ \mathsf{isValue}(v) \wedge \RtType{v}{\tau} \wedge \Oracle{s}{\MErr}{\tau} \ni v$ at the caller's $\MErr$, $\exists C'.\ C \step C'$.
-\end{enumerate}
+Let $C = \MConfig{\MErr}{\MPol}{e}$ with $\WF{C}$ and $e = \Gen{\tau}{s}{\MPrin}$ or $\Agent{s}{\MPrin}$. \textbf{T4a} (no heal past budget): if $\retries{\MErr} > \MRetry$, no $\rulename{Oracle-Heal-*}$ rule fires from $C$; every transition is an $\rulename{Oracle-Success}$ step. \textbf{T4b} (truthful success): if $\PolOk{\MPol}{\MPrin}{a.\mathsf{eff}}$ and $\mathcal{O}$ is eventually-truthful at $(s,\tau)$, then $\exists \MErr'\,C'.\ \MConfig{\MErr'}{\MPol}{e} \step C'$ via $\rulename{Oracle-Success}$. \textbf{T4c} (progress-gen/agent): with the same authorization hypothesis and a direct oracle witness at the caller's $\MErr$, $\exists C'.\ C \step C'$.
 \end{theorem}
 
-T4a is weaker than the old ``budget-exhausted gen is stuck''. There is no $\rulename{Gen-Budget-Exhausted}$ rule and no terminal-error configuration: an oracle that is still truthful at a budget-exhausted heal context can still succeed; otherwise the configuration is genuinely stuck (fail-fast by absence of transition). T4c adds the policy-authorization hypothesis that T4b's existential cannot supply and takes a direct oracle witness at the caller's heal context, matching the Lean signatures of $\mathtt{T4\_progress\_gen}$ and $\mathtt{T4\_progress\_agent}$.
+T4a is weaker than ``budget-exhausted gen is stuck'': there is no $\rulename{Gen-Budget-Exhausted}$ rule and no terminal-error configuration. An oracle still truthful at a budget-exhausted heal context can succeed; otherwise the configuration is genuinely stuck, failing fast by absence of transition. Termination (Theorem in Appendix~\ref{app:term}) is argued on paper: between oracle firings only pure-core rules fire, which terminate under the loop assumption; at each oracle firing either $\SucEv$ resets $\retries{\cdot}$ or an $\ErrEv{\cdot}$ extends the trailing run by one, bounding heals by $\MRetry$ per site.
 
-\begin{theorem}[Termination]
-\label{thm:hadl-term}
-Let $C_0 = \MConfig{\emptyset}{\MPol_0}{e_0}$ be a well-formed initial configuration. Assume every \texttt{while}/\texttt{for} loop in $e_0$ terminates. Then every trace from $C_0$ either reaches a value configuration in finitely many steps or gets stuck at some oracle redex whose retry budget has been exhausted without a truthful response --- with no ill-formed intermediate configuration and no terminal-error marker. If $\mathcal{O}$ is eventually-truthful at every oracle site encountered along the trace, the trace terminates in a value configuration.
-\end{theorem}
-
-\begin{proof}[Proof sketch]
-T1--T3 are proved by induction on the $\mathtt{Step}$ constructor, mirroring the Lean mechanization: T1 is a single clause discharged per-rule by $\mathtt{simp}$ on the append lemmas for $\retries{\cdot}$; T2 is a read-off of the $\mathsf{isValue}$-to-$\mathtt{RtType}$ table extended with $\mathtt{vClos}/\mathtt{vRec}/\mathtt{vArr}$; T3 follows from $\mathtt{policyInstall\_shrinks}$ on the only non-trivial case, $\rulename{Enforce-Install}$, and from reflexivity elsewhere. T4a inverts the $\mathtt{Step}$ relation at $a.e$ and rules out both heal rules by contradicting their $\retries{\cdot \cdot \ErrEv{\epsilon}} \le \MRetry$ premise under $\retries{\MErr} > \MRetry$. T4b applies $\rulename{Oracle-Success}$ with the eventually-truthful witness; T4c applies $\rulename{Oracle-Success}$ directly at the caller's $\MErr$. Termination is argued on paper: between two oracle firings, only pure-core rules fire, which terminate under the loop assumption; at each oracle firing either $\SucEv$ is appended (resetting $\retries{\cdot}$) or an $\ErrEv{\cdot}$ extends the retry run by one; after at most $\MRetry$ heals the configuration either succeeds or becomes stuck. Full proofs appear in Appendix~\ref{app:proofs}.
-\end{proof}
-
-\noindent\textbf{Mechanization.}
-T1--T4 are mechanized in Lean~4 under \texttt{mechanization/HADL/} in the artifact, sorry-free and depending only on Lean's standard meta-axioms ($\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$). The paper's $\step$ is the single inductive relation $\mathtt{Step}$ in \texttt{Reduction.lean} with the unified $\mathtt{OAction}$-parameterized oracle rules and six CBV structural-congruence constructors. The correspondence is: T1 $\leftrightarrow$ $\mathtt{T1\_WF\_preservation}$, T2 $\leftrightarrow$ $\mathtt{T2\_staged\_materialization}$, T3 $\leftrightarrow$ $\mathtt{T3\_policy\_monotonicity}$, T4a $\leftrightarrow$ $\mathtt{T4\_budget\_no\_heal}$, T4b $\leftrightarrow$ $\mathtt{T4\_truthful\_success}$ / $\mathtt{T4\_truthful\_success\_agent}$, T4c $\leftrightarrow$ $\mathtt{T4\_progress\_gen}$ / $\mathtt{T4\_progress\_agent}$. A build-time guard (\texttt{mechanization/HADL/AxiomCheck.lean}) breaks the Lake build if any of the nine theorems acquires an axiom beyond the three standard ones.
-
-\paragraph{Scope of the formal results.} We state explicitly what the theorems do and do not claim.
-
-\begin{itemize}
-  \item \emph{Mechanized in Lean.} All per-step theorems T1--T4c, the $\mathtt{policyInstall\_shrinks}$ lemma underpinning T3, and the retry-budget arithmetic of T4a are machine-checked. Their only axioms are $\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$.
-  \item \emph{Prose only.} The trace-level termination argument of Theorem~\ref{thm:hadl-term} is proved on paper. The per-step ingredients (retry-counter monotonicity at heal steps, reset at success, finiteness of pure-core reduction under the loop-termination assumption) are mechanized, but the overall induction over traces invokes a finiteness assumption on the number of oracle sites that we have not formalized.
-  \item \emph{Assumed, not enforced.} The eventually-truthful oracle of \defn{def:oracle-truthful} is an assumption about LLM behaviour, not a property the runtime can verify. Progress conclusions (T4b, T4c) are conditional on this assumption; without it, a configuration may be stuck at an oracle redex whose budget has been exhausted. This is by design: HADL fails closed by absence of transition rather than by a terminal-error marker.
-  \item \emph{Black-boxed.} Static type checking is treated as an external judgment in the semantics, used only through its reflexivity cases (\texttt{Schema} wildcard and value wildcard) in the T2 proof. The Rust implementation's type checker is not part of the Lean artifact.
-  \item \emph{Not modelled.} The threat-model gaps of \sect{sec:design-threat} --- prompt injection, semantic policy misalignment, \texttt{say}-based exfiltration, and \texttt{js} side effects --- are outside the scope of the formal results. Soundness says nothing about them.
-\end{itemize}
-
-The summary is that HADL's semantics guarantees \emph{staged type safety and policy monotonicity per step} under a cooperative oracle, that bounded retries do not invalidate these invariants, and that whole-trace termination is established on paper. Practical safety claims beyond this --- empirical retry convergence, adversarial robustness --- are the subject of \sect{sec:evaluation} and Section~\ref{sec:design-threat} respectively.
+\noindent\textbf{Scope of the formal results.}
+T1--T4c are mechanized in Lean~4 (\texttt{mechanization/HADL/}), sorry-free and depending only on the standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$; a build-time guard (\texttt{AxiomCheck.lean}) breaks the build on any further axiom. The trace-level termination argument is prose-only (its per-step ingredients are mechanized). The eventually-truthful oracle is an assumption about LLM behaviour the runtime cannot verify; progress conclusions are conditional on it, and absent it a configuration may be stuck at an oracle redex whose budget is exhausted --- by design, \hadl fails closed by absence of transition. Static type checking is black-boxed (only reflexivity cases appear in proofs); the Rust type checker is not part of the Lean artifact. The threat-model gaps of \sect{sec:design-threat} --- prompt injection, semantic policy misalignment, \texttt{say}-based exfiltration, and \texttt{js} side effects --- are outside the scope of soundness. Practical claims beyond staged type safety and policy monotonicity per step are the subject of \sect{sec:evaluation}.
