@@ -1,5 +1,30 @@
 \appendix
 
+\section{Threat Model and Out-of-Scope Concerns}
+\label{app:threat}
+
+\paragraph{Trust boundaries.} \hadl treats the programmer-authored program text, the static type checker, the runtime re-checker, and the installed Cedar decision procedure as trusted. It treats every LLM output, whether a value, a schema, a workflow AST, or a policy, as untrusted. The retry budget $\MRetry$ declared by \texttt{@retries} is a bound on how many untrusted attempts the runtime will consume before failing closed on a given generation site.
+
+\paragraph{What is caught.} Validation rejects an LLM output that fails the structural checks of the annotated type: a schema whose $\sigma$-image is not representable, a workflow AST that fails to type-check at its use site, a policy that triggers the deny-all guard or references an unknown action type. Every \texttt{gen} and \texttt{agent} invocation is checked against the installed policy before the LLM is called, under the explicit principal named by the surrounding \texttt{as} clause; a denial at this check becomes an $\ErrEv{\cdot}$ event and triggers retry. Append-only merging guarantees that no \texttt{enforce} step can relax an already-installed restriction.
+
+\paragraph{What is not caught.} Cedar authorizes at the granularity of a \texttt{(principal, action, resource)} triplet where the action is drawn from the fixed set $\{\texttt{gen},\texttt{agent}\}$ and the resource is the call site. It does not model the downstream side effects of an authorized \texttt{agent} call, the contents of its prompt, or the data returned by the LLM. Four categories of threat are therefore outside the current enforcement model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen} call whose prompt is composed with untrusted \texttt{ask} input can still be steered by an adversary who controls the user. Second, \emph{semantic misalignment} of generated policies: the deny-all guard and action-type check filter out policies that are syntactically pathological, but an LLM-generated policy that is merely \emph{over-permissive} with respect to operator intent will install and appear well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an already-authorized workflow emits sensitive values to the human. Fourth, \emph{side-effecting js blocks}, which execute arbitrary JavaScript under the host runtime's ambient authority. These gaps are out of scope for gradual validation as we define it; the append-only discipline prevents policy relaxation but cannot recover from a malicious or inappropriate \emph{initial} policy.
+
+\section{Type-System Limitations}
+\label{app:limitations}
+
+The type system deliberately makes several simplifications to keep gradual validation tractable.
+
+\begin{itemize}
+  \item \textbf{Arrays are homogeneously element-typed.} \texttt{array[T]} requires every element to have type $T$; there are no tuple types and no heterogeneous arrays.
+  \item \textbf{Records check declared fields only.} A record type $\{\overline{x_i{:}T_i}\}$ requires every listed field to be present with the listed type, but the runtime value may carry additional fields. There is no row polymorphism, no width subtyping beyond the \texttt{Schema}-as-top rule, and no structural subtyping between record types.
+  \item \textbf{No unions or intersections.} There are no sum types, union types, or refinement types. Values whose shape depends on runtime choice must flow through \texttt{Schema} and be re-checked at use.
+  \item \textbf{\texttt{Schema} is top during static checking.} Both $T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ hold for every $T$, so a \texttt{Schema}-typed value passes every static field-access and \texttt{eval} check; field-level validity is deferred to the post-materialization re-checker and, for compound schemas that $\sigma$ maps back to \texttt{Schema}, to the JavaScript engine at runtime.
+  \item \textbf{\texttt{js} blocks are oracular.} Inline \texttt{js} expressions produce a value whose runtime type is whatever \texttt{RtType} accepts; the \hadl type checker does not model the JS type lattice.
+  \item \textbf{No parametric polymorphism.} Workflow signatures are monomorphic.
+\end{itemize}
+
+Relaxing these is not required for gradual validation to be sound relative to \sect{sec:semantics}; each corresponds to expressiveness we chose to defer to future work.
+
 \section{Full Reduction Rules}
 \label{app:rules}
 

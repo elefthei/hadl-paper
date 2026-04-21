@@ -1,117 +1,66 @@
 \section{Design}
 \label{sec:design}
 
-This section presents the \hadl type system and the gradual validation mechanism that unifies type generation, workflow generation, and policy generation under a single pattern. We describe the abstract syntax, the correspondence between \hadl types and JavaScript types, and the three forms of gradual validation that check LLM-produced types, programs, and authorization policies at runtime. \sect{sec:semantics} gives the operational semantics and soundness theorem.
+This section presents the \hadl type system and the gradual validation mechanism that unifies type generation, workflow generation, and policy generation. We describe the abstract syntax, the correspondence between \hadl types and JavaScript types, and the three forms of gradual validation that check LLM-produced types, programs, and authorization policies at runtime. \sect{sec:semantics} gives the operational semantics and soundness theorem.
 
 \subsection{Syntax}
 \label{sec:design-syntax}
 
-Figure~\ref{fig:syntax} presents the abstract syntax of HADL. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types for workflows, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the four domain-specific primitives (\texttt{ask}, \texttt{say}, \texttt{gen}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{gen} and \texttt{agent} expressions accepts either a string literal or a variable reference for dynamic principal resolution.
+Figure~\ref{fig:syntax} presents the abstract syntax. A program consists of pragmas followed by declarations. Types include base types, \texttt{Schema} (the type of types), arrow types, \texttt{Policy} for authorization rules, and named references. Expressions include standard imperative constructs, the four domain-specific primitives (\texttt{ask}, \texttt{say}, \texttt{gen}, \texttt{agent}), JavaScript interop (\texttt{js}), workflow invocation (\texttt{eval}), policy activation (\texttt{enforce}), and comparison operators. The \texttt{as} clause on \texttt{gen}/\texttt{agent} accepts a string literal or a variable reference for dynamic principal resolution.
 
 \begin{figure}[t]
 \[\begin{array}{rcll}
 P & ::= & \pi^*\; d^* & \textit{program} \\[4pt]
-\pi & ::= & \texttt{@policy}\; s & \textit{policy pragma} \\
-    & \mid & \texttt{@retries}\; n & \textit{retry pragma} \\[4pt]
-d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow declaration} \\
-  & \mid & \texttt{type}\; X = T & \textit{type declaration} \\[4pt]
+\pi & ::= & \texttt{@policy}\; s \mid \texttt{@retries}\; n & \textit{pragmas} \\[4pt]
+d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow decl.} \\
+  & \mid & \texttt{type}\; X = T & \textit{type decl.} \\[4pt]
 T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \textit{base types} \\
-  & \mid & \texttt{Schema} & \textit{type of types} \\
-  & \mid & \texttt{Policy} & \textit{authorization policy} \\
-  & \mid & (T_1 \to T_2) & \textit{arrow type} \\
-  & \mid & \texttt{array[}T\texttt{]} & \textit{array type} \\
-  & \mid & \{ \overline{x_i{:}T_i} \} & \textit{record type} \\
-  & \mid & X & \textit{named type reference} \\[4pt]
-e & ::= & s \mid n \mid b & \textit{literals} \\
-  & \mid & x & \textit{variable reference} \\
-  & \mid & \texttt{let}\; x {:} T = e \mid \texttt{let}\; x = e & \textit{immutable binding} \\
-  & \mid & \texttt{var}\; x {:} T = e \mid \texttt{var}\; x = e & \textit{mutable binding} \\
-  & \mid & x = e & \textit{assignment} \\
-  & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] & \textit{conditional} \\
-  & \mid & \texttt{while}\; (e)\; \{e\} & \textit{loop} \\
-  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \textit{iteration} \\
-  & \mid & \texttt{ask}\; s & \textit{human prompt} \\
-  & \mid & \texttt{say}\; s & \textit{human output} \\
-  & \mid & \texttt{gen}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM gen call} \\
-  & \mid & \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM agent call} \\
-  & \mid & \texttt{js}\; c & \textit{JavaScript expression} \\
-  & \mid & \texttt{eval}\; e\;(e_1, \ldots, e_k) & \textit{workflow invocation} \\
-  & \mid & \texttt{enforce}\; x & \textit{policy activation} \\
-  & \mid & e_1 \;\mathit{op}\; e_2 & \textit{comparison} \\
-  & \mid & e_1 ;\; e_2 & \textit{sequencing} \\[4pt]
-\mathit{op} & ::= & \texttt{==} \mid \texttt{!=} \mid \texttt{<} \mid \texttt{<=} \mid \texttt{>} \mid \texttt{>=} & \textit{comparison operators}
+  & \mid & \texttt{Schema} \mid \texttt{Policy} \mid (T_1 \to T_2) & \\
+  & \mid & \texttt{array[}T\texttt{]} \mid \{ \overline{x_i{:}T_i} \} \mid X & \\[4pt]
+e & ::= & s \mid n \mid b \mid x & \textit{literals, vars} \\
+  & \mid & \texttt{let}\; x {:} T = e \mid \texttt{var}\; x {:} T = e \mid x = e & \textit{bindings} \\
+  & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] \mid \texttt{while}\; (e)\; \{e\} & \\
+  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} \mid e_1 ;\; e_2 \mid e_1 \;\mathit{op}\; e_2 & \\
+  & \mid & \texttt{ask}\; s \mid \texttt{say}\; s & \textit{I/O} \\
+  & \mid & \texttt{gen}\; s\; [\texttt{as}\; (s \mid x)] \mid \texttt{agent}\; s\; [\texttt{as}\; (s \mid x)] & \textit{LLM calls} \\
+  & \mid & \texttt{js}\; c \mid \texttt{eval}\; e\;(e_1, \ldots, e_k) \mid \texttt{enforce}\; x &
 \end{array}\]
-\caption{Abstract syntax of HADL. Square brackets denote optional components. The notation $(s \mid x)$ in the \texttt{as} clause indicates that the principal can be either a string literal or a variable reference. Overlined parameters $\overline{x_i{:}T_i}$ denote a possibly empty sequence. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string literals, number literals (signed, possibly fractional), boolean literals, JavaScript code, variable names, workflow names, and type names respectively.}
+\caption{Abstract syntax of \hadl. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names.}
 \label{fig:syntax}
 \end{figure}
 
-HADL's base types correspond to JavaScript types (\texttt{String}$\to$\texttt{string}, \texttt{Number}$\to$\texttt{number}, \texttt{Bool}$\to$\texttt{boolean}, $()$$\to$\texttt{null}), and all runtime values are represented as JSON. The type checker uses type inference with subsumption. \texttt{gen} and \texttt{js} expressions are treated as oracles that can produce any type, requiring explicit type annotations at binding sites. Three types play a special role in gradual validation: \texttt{Schema} is the \emph{type of types}, arrow types $(T_1 \to T_2)$ are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
+\hadl's base types correspond to JavaScript types ($\texttt{String}{\to}\texttt{string}$, etc.), and all runtime values are represented as JSON. The type checker uses inference with subsumption. \texttt{gen} and \texttt{js} are oracular, requiring explicit annotations at binding sites. Three types play a special role in gradual validation: \texttt{Schema} is the \emph{type of types}, arrow types are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
 
 \subsection{Gradual Validation}
 \label{sec:design-gradual}
 
-HADL addresses the inherently dynamic nature of LLM outputs through \emph{gradual validation}, in which three type annotations (\texttt{Schema}, arrow types, and \texttt{Policy}) signal that the annotated value will be generated by the LLM at runtime. \texttt{Schema} is treated as universally compatible during static checking, inspired by the unknown type in gradual typing~\cite{siek2006gradual}, but rather than inserting casts at boundaries, HADL re-invokes the type checker over downstream code when concrete types materialize. When such a value materializes, the runtime validates it, installs it into the execution context, and enforces it over the remainder of the program. All three forms share feedback-driven self-healing that retries the causal gen call if validation fails.
+\hadl addresses the dynamic nature of LLM outputs through \emph{gradual validation}: three annotations (\texttt{Schema}, arrow types, \texttt{Policy}) signal that the annotated value will be generated at runtime. \texttt{Schema} is treated as universally compatible during static checking, inspired by the unknown type in gradual typing~\cite{siek2006gradual}, but rather than inserting casts, \hadl re-invokes the type checker over downstream code when a concrete type materializes. All three forms share feedback-driven self-healing that retries the causal gen call if validation fails.
 
-\subsubsection{Gradual Type Generation}
-\label{sec:design-gradual-types}
-
-A \texttt{gen} call annotated with \texttt{Schema} produces a JSON Schema value at runtime, providing a structured specification of fields, their types, and their constraints. Because the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible, meaning both $T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ hold for all types $T$. This allows \texttt{Schema}-annotated bindings to pass static checking while deferring actual type verification to runtime. When a schema materializes, the interpreter converts it to a concrete HADL type using the mapping $\sigma$ defined in Figure~\ref{fig:schema-to-type}, registers it in the type environment, and re-invokes the type checker over the remaining program before execution resumes.
+\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. Since the concrete type does not exist at compile time, the subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it via the mapping $\sigma$ of Figure~\ref{fig:schema-to-type}, registers it in the type environment, and re-invokes the type checker over the remaining program. A \texttt{Schema}-typed variable can then appear in annotation position (e.g.~\texttt{let booking: form\_schema = gen "..."}). Re-checking after materialization verifies downstream bindings; if it fails and \texttt{@retries} is active, the runtime re-invokes the causal gen call with the type error as feedback.
 
 \begin{figure}[t]
+\small
 \[
 \sigma(\tau) = \begin{cases}
-() & \text{if } \tau = \texttt{null} \\
-\texttt{Bool} & \text{if } \tau = \texttt{boolean} \\
-\texttt{Number} & \text{if } \tau = \texttt{integer} \text{ or } \tau = \texttt{number} \\
-\texttt{String} & \text{if } \tau = \texttt{string} \text{ or } \tau = \texttt{enum} \\
-\texttt{Schema} & \text{if } \tau = \texttt{array} \text{ or } \tau = \texttt{object} \text{ or } \tau = \texttt{\$ref}
+() & \tau = \texttt{null} \\
+\texttt{Bool} & \tau = \texttt{boolean} \\
+\texttt{Number} & \tau \in \{\texttt{integer},\texttt{number}\} \\
+\texttt{String} & \tau \in \{\texttt{string},\texttt{enum}\} \\
+\texttt{Schema} & \tau \in \{\texttt{array},\texttt{object},\texttt{\$ref}\}
 \end{cases}
 \]
-\caption{The schema-to-type mapping $\sigma$. Converts a runtime JSON Schema type $\tau$ into a HADL type. Primitive schemas map to concrete HADL types. Compound schemas (arrays, objects, references) remain as \texttt{Schema}.}
+\caption{The schema-to-type mapping $\sigma$. Compound schemas (arrays, objects, references) remain as \texttt{Schema}.}
 \label{fig:schema-to-type}
 \end{figure}
 
-The schema value can then appear in type annotation position for subsequent bindings. For example, in the binding \texttt{let booking: form\_schema = gen "..."}, the variable \texttt{form\_schema} holds a schema value whose materialized type governs the type of \texttt{booking}. When such a binding is evaluated, the interpreter deserializes the LLM's response as a JSON Schema, converts it to a concrete HADL type via $\sigma$, registers the type in the environment so that the variable can be used in type annotation positions, and re-invokes the type checker over the remaining expressions. When a schema-typed variable is mutated via assignment, the same process re-parses and re-checks. If re-checking fails and the \texttt{@retries} pragma is active, the runtime re-invokes the causal gen call with the type error as feedback, up to the declared retry limit.
+\paragraph{Gradual workflow generation.} A \texttt{gen} annotated with an arrow type (e.g.~\texttt{(String -> Number)}) instructs the LLM to produce a complete \hadl workflow as structured output. The entire AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program}. \texttt{eval} deserializes, validates, and executes this value within the current interpreter context with closure-like semantics. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM.
 
-The staged mechanism provides two guarantees. First, at compile time, all statically known types are verified before any LLM call is made. Second, at runtime, the type checker is re-invoked with the concrete schema type substituted into the environment, verifying that downstream bindings are consistent with the materialized type. Compound JSON Schema types map to \texttt{Schema} under $\sigma$, so field-level property access is performed by the JavaScript engine at runtime on the underlying JSON values.
+\paragraph{Gradual policy generation.} A \texttt{gen} annotated with \texttt{Policy} instructs the LLM to produce a Cedar policy as JSON. Gradual policy generation separates policy \emph{generation} from \emph{activation}: a \texttt{Policy}-annotated binding stores the policy without activating it, and the explicit \texttt{enforce} expression installs it. Because \texttt{enforce} is an ordinary expression, it can appear inside conditional branches, enabling human-in-the-loop approval. Installation enforces a deny-all guard (rejecting blanket \texttt{forbid}), action-type validation, append-only merging (so restrictions accumulate monotonically), and scoped principal validation across \texttt{as} clauses. If a generated policy fails to compile, feedback-driven self-healing re-invokes the causal gen call with the Cedar error.
 
-\subsubsection{Gradual Workflow Generation}
-\label{sec:design-gradual-workflows}
-
-A \texttt{gen} call annotated with an arrow type such as \texttt{(String -> Number)} instructs the LLM to produce a complete HADL workflow as structured output. The entire HADL AST is serializable, so the LLM can generate a JSON-serialized \texttt{Program} containing a workflow declaration with typed parameters and a body. The \texttt{eval} expression deserializes this value, validates it, and executes it within the current interpreter context with closure-like semantics. At the type level, if the function type is an arrow $(A \to R)$, arguments are checked against $A$ and the result type is $R$; if the type is \texttt{Schema}, checking is deferred to runtime. This enables hierarchical plan generation where an outer workflow delegates sub-task planning to the LLM, and the generated workflow is a full typed program that the type checker can verify at the call site.
-
-\subsubsection{Gradual Policy Generation}
-\label{sec:design-gradual-policies}
-
-A \texttt{gen} call annotated with \texttt{Policy} instructs the LLM to produce a Cedar authorization policy as a JSON value at runtime. Gradual policy generation separates policy \emph{generation} from policy \emph{activation}: a \texttt{Policy}-annotated binding stores the generated policy without activating it, and the explicit \texttt{enforce} expression installs it in the runtime. Because \texttt{enforce} is an ordinary expression, it can appear inside conditional branches, enabling human-in-the-loop approval. The type checker verifies at compile time that \texttt{enforce} targets a \texttt{Policy}-typed variable, and the expression returns~$()$.
-
-Installation enforces four invariants. First, a \emph{deny-all guard} rejects any blanket \texttt{forbid} rule that would block all operations. Second, \emph{action type validation} rejects unknown action types before they reach Cedar. Third, policies are merged \emph{append-only}: new rules can tighten access but cannot remove existing rules, and Cedar's \texttt{forbid}-over-\texttt{permit} precedence guarantees that restrictions accumulate monotonically across multiple \texttt{enforce} expressions. Fourth, \emph{scoped principal validation} checks that all \texttt{as} clause references between the current \texttt{enforce} and the next one name principals defined in the active policy, catching mismatches early. The \texttt{as} clause accepts both string literals and variable references for dynamic principal resolution. If the generated policy fails to compile, the same feedback-driven self-healing mechanism used for schema errors re-invokes the causal gen call with the Cedar error and valid schema as feedback.
-
-\subsection{Threat Model and Scope of Enforcement}
+\subsection{Threat Model and Limitations}
 \label{sec:design-threat}
 
-Gradual validation and Cedar-based authorization protect against a specific class of failures, and it is important to state what they do and do not cover.
+\hadl trusts the programmer-authored text, the type checker, the runtime re-checker, and the Cedar decision procedure; it treats every LLM output as untrusted. The retry budget $\MRetry$ bounds how many untrusted attempts the runtime consumes per site. Validation rejects outputs that fail structural checks of the annotated type, and every \texttt{gen}/\texttt{agent} is Cedar-checked against the installed policy before the LLM is called; a denial triggers retry. Four threat classes remain outside this model: \emph{prompt injection} against the LLM via composed \texttt{ask} input; \emph{semantic misalignment} of generated policies (the deny-all guard catches pathological policies but not merely over-permissive ones); \emph{data exfiltration} via \texttt{say}; and \emph{side effects} of \texttt{js} blocks executing under ambient host authority. \sect{app:threat} expands on these. The formal results are stated relative to an \emph{eventually-truthful} oracle (\defn{def:oracle-truthful}); an adversarial or permanently-lying oracle exhausts the budget and the configuration fails closed by absence of transition.
 
-\paragraph{Trust boundaries.} HADL treats the programmer-authored program text, the static type checker, the runtime re-checker, and the installed Cedar decision procedure as trusted. It treats every LLM output, whether a value, a schema, a workflow AST, or a policy, as untrusted. The retry budget $\MRetry$ declared by \texttt{@retries} is a bound on how many untrusted attempts the runtime will consume before failing closed on a given generation site.
-
-\paragraph{What is caught.} Validation rejects an LLM output that fails the structural checks of the annotated type: a schema whose $\sigma$-image is not representable, a workflow AST that fails to type-check at its use site, a policy that triggers the deny-all guard or references an unknown action type. Every \texttt{gen} and \texttt{agent} invocation is checked against the installed policy before the LLM is called, under the explicit principal named by the surrounding \texttt{as} clause; a denial at this check becomes an $\ErrEv{\cdot}$ event and triggers retry. Append-only merging guarantees that no \texttt{enforce} step can relax an already-installed restriction.
-
-\paragraph{What is not caught.} Cedar authorizes at the granularity of a \texttt{(principal, action, resource)} triplet where the action is drawn from the fixed set $\{\texttt{gen},\texttt{agent}\}$ and the resource is the call site. It does not model the downstream side effects of an authorized \texttt{agent} call, the contents of its prompt, or the data returned by the LLM. Four categories of threat are therefore outside the current enforcement model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen} call whose prompt is composed with untrusted \texttt{ask} input can still be steered by an adversary who controls the user. Second, \emph{semantic misalignment} of generated policies: the deny-all guard and action-type check filter out policies that are syntactically pathological, but an LLM-generated policy that is merely \emph{over-permissive} with respect to operator intent will install and appear well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an already-authorized workflow emits sensitive values to the human. Fourth, \emph{side-effecting js blocks}, which execute arbitrary JavaScript under the host runtime's ambient authority. These gaps are out of scope for gradual validation as we define it; the append-only discipline prevents policy relaxation but cannot recover from a malicious or inappropriate \emph{initial} policy.
-
-\paragraph{Oracle assumption.} The formal results in \sect{sec:semantics} are stated relative to an \emph{eventually-truthful} oracle (\defn{def:oracle-truthful}): one that, within the retry budget, eventually produces a response satisfying the runtime-type predicate. This is an assumption about the LLM's cooperative behaviour, not a property enforced by the language; an adversarial or permanently-lying oracle will exhaust the budget and the configuration will become stuck (fail-fast by absence of transition).
-
-\subsection{Type-System Limitations}
 \label{sec:design-limitations}
-
-The type system deliberately makes several simplifications to keep gradual validation tractable. We list the restrictions explicit to the reviewer so that the scope of the static guarantees is not overclaimed.
-
-\begin{itemize}
-  \item \textbf{Arrays are homogeneously element-typed.} \texttt{array[T]} requires every element to have type $T$; there are no tuple types and no heterogeneous arrays.
-  \item \textbf{Records check declared fields only.} A record type $\{\overline{x_i{:}T_i}\}$ requires every listed field to be present with the listed type, but the runtime value may carry additional fields. There is no row polymorphism, no width subtyping beyond the \texttt{Schema}-as-top rule, and no structural subtyping between record types.
-  \item \textbf{No unions or intersections.} There are no sum types, union types, or refinement types. Values whose shape depends on runtime choice must flow through \texttt{Schema} and be re-checked at use.
-  \item \textbf{\texttt{Schema} is top during static checking.} Both $T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ hold for every $T$, so a \texttt{Schema}-typed value passes every static field-access and \texttt{eval} check; field-level validity is deferred to the post-materialization re-checker and, for compound schemas that $\sigma$ maps back to \texttt{Schema}, to the JavaScript engine at runtime.
-  \item \textbf{\texttt{js} blocks are oracular.} Inline \texttt{js} expressions produce a value whose runtime type is whatever \texttt{RtType} accepts; the HADL type checker does not model the JS type lattice.
-  \item \textbf{No parametric polymorphism.} Workflow signatures are monomorphic.
-\end{itemize}
-
-Relaxing these is not required for gradual validation to be sound relative to \sect{sec:semantics}; each corresponds to expressiveness we chose to defer to future work.
+The type system is deliberately simple: monomorphic, with homogeneous arrays, declared-field record checking (no row polymorphism or width subtyping), no sum/union/intersection types, \texttt{Schema} as top during static checking, and oracular \texttt{js} blocks. Relaxing these is not required for gradual validation to be sound; \sect{app:limitations} enumerates each restriction.
