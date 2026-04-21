@@ -15,7 +15,7 @@ namespace HADL
 inductive RtType : Value → Ty → Prop where
   | vUnit    : RtType .unitV .tUnit
   | vBool {b}: RtType (.boolV b) .tBool
-  | vInt  {i}: RtType (.intV  i) .tInt
+  | vNum  {i}: RtType (.numV  i) .tNumber
   | vStr  {s}: RtType (.strV  s) .tString
   | vSchema {τ} : RtType (.schemaV τ) .tSchema
   | vPol    {p} : RtType (.polV p) .tPolicy

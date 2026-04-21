@@ -56,7 +56,7 @@ theorem T1_WF_preservation
 private theorem value_typeable : ∀ v : Value, ∃ τ, RtType v τ
   | .unitV      => ⟨_, .vUnit⟩
   | .boolV _    => ⟨_, .vBool⟩
-  | .intV  _    => ⟨_, .vInt⟩
+  | .numV  _    => ⟨_, .vNum⟩
   | .strV  _    => ⟨_, .vStr⟩
   | .schemaV _  => ⟨_, .vSchema⟩
   | .polV _     => ⟨_, .vPol⟩

@@ -30,7 +30,7 @@ def OAction.princ : OAction → Principal
   | .gen _ _ π => π
   | .agent _ π => π
 
-def OAction.effect : OAction → Action
+def OAction.eff : OAction → Action
   | .gen _ _ _   => .gen
   | .agent _ _   => .agent
 
@@ -103,7 +103,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   /-- Unified `gen`/`agent` success rule when oracle returns a well-typed
       value AND policy allows. -/
   | oracleSuccess {ec P σ v} {a : OAction}
-      (hauth   : policyAllows P a.princ a.effect)
+      (hauth   : policyAllows P a.princ a.eff)
       (horacle : O a.stmt ec a.ty v)
       (hrt     : RtType v a.ty) :
       Step O ⟨ec, P, σ, a.toExpr⟩ ⟨ec ++ [Event.success], P, σ, .val v⟩
@@ -111,7 +111,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   /-- Type-heal: oracle returned an ill-typed value within budget; record
       error, retry. -/
   | oracleHealType {ec P σ v} {a : OAction}
-      (hauth   : policyAllows P a.princ a.effect)
+      (hauth   : policyAllows P a.princ a.eff)
       (horacle : O a.stmt ec a.ty v)
       (hbad    : ¬ RtType v a.ty)
       (hbudget : ErrCtx.retries (ec ++ [Event.error (explain a v)]) ≤ retryBudget) :
@@ -120,7 +120,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
 
   /-- Policy-heal: policy denied action within budget; record error, retry. -/
   | oracleHealPol {ec P σ} {a : OAction}
-      (hdeny   : ¬ policyAllows P a.princ a.effect)
+      (hdeny   : ¬ policyAllows P a.princ a.eff)
       (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy a P)]) ≤ retryBudget) :
       Step O ⟨ec, P, σ, a.toExpr⟩
              ⟨ec ++ [Event.error (explainPolicy a P)], P, σ, a.toExpr⟩

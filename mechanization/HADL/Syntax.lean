@@ -22,7 +22,7 @@ abbrev Principal := String
 inductive Ty where
   | tUnit   : Ty
   | tBool   : Ty
-  | tInt    : Ty
+  | tNumber    : Ty
   | tString : Ty
   | tSchema : Ty
   | tPolicy : Ty
@@ -55,7 +55,7 @@ inductive Value where
   /-- Boolean literal. -/
   | boolV   : Bool → Value
   /-- Integer literal. -/
-  | intV    : Int → Value
+  | numV    : Int → Value
   /-- String literal. -/
   | strV    : String → Value
   /-- First-class type (reified schema). -/
@@ -158,7 +158,7 @@ mutual
 def Value.rmap (r : Ren) : Value → Value
   | .unitV      => .unitV
   | .boolV b    => .boolV b
-  | .intV  i    => .intV  i
+  | .numV  i    => .numV  i
   | .strV  s    => .strV  s
   | .schemaV τ  => .schemaV τ
   | .polV p     => .polV p
@@ -220,7 +220,7 @@ mutual
 def Value.smap (σ : Subst Expr) : Value → Value
   | .unitV      => .unitV
   | .boolV b    => .boolV b
-  | .intV  i    => .intV  i
+  | .numV  i    => .numV  i
   | .strV  s    => .strV  s
   | .schemaV τ  => .schemaV τ
   | .polV p     => .polV p
