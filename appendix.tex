@@ -23,6 +23,13 @@ The type system deliberately makes several simplifications to keep gradual valid
   \item \textbf{No parametric polymorphism.} Workflow signatures are monomorphic.
 \end{itemize}
 
+\section{Car-Scorer Example Workflow}
+\label{app:overview-example}
+
+\input{figures/car_scorer}
+
+Figure~\ref{fig:overview-workflow} shows the car-recommendation workflow referenced in \sect{sec:overview}. Lines~3--4 of the outer workflow generate a \texttt{Schema} describing a single car. Lines~5--6 ask the LLM to generate a scorer with the workflow type \texttt{(car\_schema -> Number)}; the LLM produces the workflow on the right, which takes a car conforming to the schema and returns a numeric score. The \texttt{while} loop on lines~10--20 fills the schema three times; line~13 applies the generated scorer via \texttt{eval scorer(car)}, with the type checker verifying that argument and return types match the workflow type at the call site. The generated workflow itself calls \texttt{gen} three times to rate the car's comfort, cost, and safety, averaging them via \texttt{js}.
+
 \section{Evaluation Methodology}
 \label{app:eval-method}
 
