@@ -5,37 +5,7 @@ Modern agents write substantial programs. A single agent run now sequences many 
 
 Today developers express these plans using orchestration frameworks such as LangChain~\cite{langchain2022} or ad-hoc Python scripts. These approaches treat plans as configurations of library objects: gen calls return untyped data, control flow is scattered across callback edges, structural errors surface only at runtime, and authorization is applied at the outer boundary rather than per invocation. Neighboring programming-language approaches such as LMQL~\cite{beurer2023prompting} and DSPy~\cite{khattab2023dspy} address parts of this problem but do not integrate a type system for gen outputs with per-invocation authorization. Yue et al.~\cite{yue2026statictemplatesdynamicruntime} identify the tension between expressivity and verifiability as a central open problem in this space.
 
-\begin{figure}[H]
-\begin{lstlisting}[language=hadl,showstringspaces=false]
-@retries 3
-
-workflow clinical_trial() -> String {
-  let trial = ask "Describe the clinical trial"
-  let crf: Schema = gen "Generate a CRF schema for `trial`"
-  let policy: Policy = gen "Coordinators cannot see
-    unblinding data. Safety_board has full access."
-  enforce policy
-  let role = ask "Your role?"
-  let ids: Schema = gen "List 3 patient IDs"
-  var total: Number = 0
-  for pid in ids {
-    let visit: crf = gen "Generate visit for `pid` in `trial`" as role
-    total = js total + 1
-    say "`visit.patient_id` recorded"
-  }
-  say "Collected `total` visits"
-  let sae = ask "Adverse event reported?"
-  if (sae == "yes") {
-    let safety: Policy = gen "Coordinators cannot see adverse events."
-    enforce safety
-    gen "Write an SAE narrative" as "safety_board"
-  }
-  "done"
-}
-\end{lstlisting}
-\caption{A clinical-trial workflow combining \texttt{Schema}, \texttt{Policy}, \texttt{enforce}, and \texttt{@retries}-driven self-healing.}
-\label{fig:clinical-trial}
-\end{figure}
+\input{figures/clinical_trial}
 
 Figure~\ref{fig:clinical-trial} illustrates gradual validation and per-invocation authorization in a single workflow. Two \texttt{gen} calls produce program structure --- a type and a policy --- that are activated on the very next lines. Every subsequent call is typed against the generated schema and checked against the generated policy under an explicit principal. When new information arrives, a second policy is generated and activated, merged append-only with the first, so access rules only tighten. The same type discipline that governs ordinary field access such as \texttt{visit.patient\_id} governs the LLM output that produced the value.
 
