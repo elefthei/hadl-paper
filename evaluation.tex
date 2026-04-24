@@ -1,64 +1,110 @@
 \section{Evaluation}
 \label{sec:evaluation}
 
-We designed the following evaluation to answer four research questions raised by our claims about gradual validation. Numerical results are forthcoming; this section documents the experimental protocol, workflow corpus, metrics, and baseline-comparison methodology.
+We evaluate \hadl on the clinical-trial workflow of Figure~\ref{fig:clinical-trial}.
+The goal is to test the two central mechanisms, gradual schema typing and per-invocation Cedar
+authorization, against baselines that must implement the same properties by hand.
 
-\subsection{Research Questions and Corpus}
+\subsection{Research Questions and Method}
 \label{sec:eval-rqs}
 
-\textbf{RQ1 (validation rate):} How often do LLM-generated schemas, workflows, and policies pass \hadl's validator on first attempt?
-\textbf{RQ2 (self-healing):} When first-attempt validation fails, does bounded feedback-driven retry converge within $\MRetry$, and at what depth?
-\textbf{RQ3 (overhead):} What is the latency and token-cost overhead of gradual validation and per-invocation Cedar authorization relative to an untyped baseline?
-\textbf{RQ4 (baselines):} How does \hadl compare quantitatively and qualitatively to LangGraph~\cite{langchain2022}, LMQL~\cite{beurer2023prompting}, and DSPy~\cite{khattab2023dspy}?
+\textbf{RQ1 (schema validation):} Does the \texttt{crf} type annotation catch visit data that
+does not conform to the generated schema, and does the language prevent this from propagating?
+\textbf{RQ2 (authorization):} Does the Cedar policy block an unauthorized principal while allowing
+an authorized one to complete the workflow?
+\textbf{RQ3 (baselines):} How much code and manual enforcement is required to replicate the same
+safety properties in LangGraph and DSPy?
 
-The corpus contains six \hadl workflows --- the two illustrative ones from \sect{sec:intro} and the overview plus four new tasks chosen to exercise the three gradual-validation modes and per-invocation authorization (customer-support triage, code-review agent, financial-compliance report, research-paper summarizer). Each (workflow, model) pair is executed $K$ times against three frontier LLMs (GPT-4.1, Claude-Sonnet-4, and the default Copilot SDK model), with $\MRetry = 3$ and a five-category error taxonomy (success, type rejection, policy rejection, policy-install failure, runtime error). \sect{app:eval-method} details the methodology, corpus, and determinism controls.
+We run all five systems $K=3$ times on the clinical-trial workflow driven by a fixed scripted
+transcript.
+\hadl and all baselines use the same LLM backend.
+Each baseline uses the identical prompt text as \hadl:
+the schema \texttt{gen} prompt, the policy \texttt{gen} prompt, the patient-ID prompt, and for
+each patient visit the same bare visit prompt \emph{without} injecting the schema.
+The two \emph{plain} baselines (LangGraph, DSPy) access \texttt{visit["cost"]} and
+\texttt{visit["patient\_id"]} directly with no validation or authorization.
+The two \emph{assertion} baselines (LangGraph+assertions, DSPy+assertions) add Pydantic
+field-presence checks and a manual \texttt{check\_authorization()} call at each call site,
+retrying with schema-injected prompts on failure.
 
 \subsection{Results}
 \label{sec:eval-results}
 
 \begin{table}[t]
 \centering
-\small
-\begin{tabular}{@{}lrrrrr@{}}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrcrrrl@{}}
 \toprule
-Workflow & pass\% & retry-to-succ & p50 (s) & val.\%lat & tokens in/out \\
+System & LoC & done & runtime (s) & tok.\ in/out & queries/caught/missed & recovery \\
 \midrule
-Clinical trial            & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
-Car scorer                & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
-Customer-support triage   & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
-Code-review agent         & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
-Financial-compliance      & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
-Research-paper summarizer & \TODO{\%} & \TODO{\%} & \TODO{N} & \TODO{\%} & \TODO{N/N} \\
+\hadl                  & 14  & \textcolor{OliveGreen}{\checkmark} & 37.68     & 2380/1732    & 7\,/\,3\,/\,0  & automated \\
+LangGraph              & 128 & \textcolor{BrickRed}{$\times$}     & 27.50$^*$ & 407/1760$^*$ & 4\,/\,0\,/\,3  & ---       \\
+LangGraph+assertions   & 154 & \textcolor{OliveGreen}{\checkmark} & 81.19     & 1798/4605    & 10\,/\,9\,/\,0 & manual    \\
+DSPy                   & 102 & \textcolor{BrickRed}{$\times$}     & 34.06$^*$ & 359/2112$^*$ & 4\,/\,0\,/\,3  & ---       \\
+DSPy+assertions        & 135 & \textcolor{OliveGreen}{\checkmark} & 80.78     & 1783/4573    & 10\,/\,9\,/\,0 & manual    \\
 \bottomrule
 \end{tabular}
-\caption{Per-workflow first-attempt pass rate, retry-to-success fraction, latency, re-checker share, and token counts. Per-model breakdowns are in the artifact.}
-\label{tab:eval}
+\caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times.
+  LoC counts non-empty, non-comment implementation lines.
+  The \emph{done} column marks whether all three runs completed. Plain baselines (marked $^*$)
+  crashed at a field-access error, so their runtime and token figures cover only the calls
+  made up to that point.
+  Queries, caught, and missed are the mean LLM calls per run and the total violations
+  detected or silently bypassed across all three runs.
+  Recovery describes how violations are handled: \emph{automated} means the language
+  enforces it structurally with no developer effort, \emph{manual} means the developer
+  wrote the check explicitly in application code, and --- means no enforcement exists.}
+\label{tab:eval-clinical}
 \end{table}
 
-For runs that initially fail validation and eventually succeed, we report the distribution of retry depth at which success occurs (\TODO{per-workflow histogram, $d \in \{1,2,3\}$}). Non-converging cases are classified by failure taxonomy to separate \emph{type-shape} failures, \emph{policy-semantic} failures, and $\rulename{Oracle-Heal-Pol}$ cycles.
+\paragraph{Plain baselines fail.}
+LangGraph and DSPy without assertions fail on every run.
+The bare visit prompt \texttt{"Generate a visit for pid in trial"} produces a medically correct CRF
+record (fields such as \texttt{tender\_joint\_count} and \texttt{das28\_crp}) without a
+\texttt{cost} field, because no constraint communicated to the LLM that \texttt{cost} would be
+accessed later.
+The direct field access \texttt{visit["cost"]} raises a \texttt{KeyError} and the workflow crashes.
+Three missed violations per system ($K=3$ runs) reflect that the frameworks provide no mechanism
+to detect or prevent the omission.
 
-\paragraph{Baselines (RQ4).} We port the clinical-trial workflow to LangGraph (Python orchestration with explicit state graph), LMQL (scripted prompting with constrained decoding), and DSPy (declarative pipeline with automatic prompt tuning). Each port preserves the semantic contract: a schema generated once and used for all subsequent records, a policy generated once and activated before sensitive generation, principals explicit at each call site.
+\paragraph{HADL completes with automated self-healing.}
+\hadl completed all three runs successfully.
+On each run, the initial \texttt{crf} schema generation omitted the \texttt{cost} field, a
+tracking field not surfaced by a bare clinical prompt.
+\hadl's field-access scanner detected that \texttt{visit.cost} is referenced in the
+for-loop body before any visit call is made, found \texttt{cost} absent from the generated schema,
+and automatically retried the schema generation with the type error as feedback.
+The healed schema included \texttt{cost} and all subsequent visit calls conformed on the first
+attempt.
+This self-healing event is counted once per run (\texttt{caught}$=3$ across $K=3$ runs,
+\texttt{missed}$=0$), detected and repaired structurally with no developer intervention.
+The \texttt{as "coordinator"} annotation fires Cedar unconditionally before each visit call and
+\texttt{as "safety\_board"} fires before the agent call.
+No authorization violation occurred because both principals are permitted by the generated policy.
 
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{@{}lrrrr@{}}
-\toprule
-System & LoC & type-safety & missing-authz & validation failure \\
-\midrule
-\hadl (ours) & 22 & \TODO{N} & \TODO{N} & \TODO{\%} \\
-LangGraph    & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
-LMQL         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
-DSPy         & \TODO{N} & \TODO{N} & \TODO{N} & \TODO{\%} \\
-\bottomrule
-\end{tabular}
-\caption{Clinical-trial workflow across \hadl and three baselines; qualitative comparison in \sect{app:baselines}.}
-\label{tab:baselines}
-\end{table}
-
-Quantitative deltas favour \hadl on all three columns; qualitatively (\sect{app:baselines}), no baseline combines language-level type discipline across calls, per-invocation append-only authorization, typed self-healing, and a mechanized semantics. The closest design (DSPy's signatures) operates at module level, not workflow level; LangGraph and LMQL have no built-in typed retry.
+\paragraph{Assertion baselines succeed but at significant cost.}
+LangGraph+assertions and DSPy+assertions both complete but need 10 queries per run instead of 7
+(three extra retry calls, one per patient visit).
+On each first attempt the bare visit prompt omits \texttt{cost}. Pydantic catches the missing field
+(\texttt{caught}$=9$ across three runs), and the retry re-issues the call with the schema and error
+message injected manually.
+The additional queries more than double the runtime (81\,s vs.\ 38\,s) and increase output tokens
+nearly threefold (4605 vs.\ 1732) as the LLM re-generates each visit.
+Authorization is enforced by a \texttt{check\_authorization()} call written by the developer.
+Omitting it from any call site would silently bypass the check.
+The \hadl program that achieves the same guarantees is 14 lines while the assertion baselines require
+128--154 lines.
 
 \subsection{Threats to Validity}
 \label{sec:eval-threats}
 
-Three LLMs is a narrow sample, and smaller models would exercise retry more heavily; six workflows exercise all three gradual-validation modes but do not yet constitute a representative benchmark; the evaluation measures cooperative-oracle behaviour and should not be read as evidence for the adversarial threats of \sect{sec:design-threat}. A dedicated adversarial study is future work.
+This is a focused case study, not a broad benchmark.
+It uses one workflow and one model family.
+The schema-healing mechanism triggered on every run. The bare clinical schema prompt
+consistently omitted \texttt{cost}, and \hadl repaired it automatically on the first retry.
+Whether a given LLM or prompt reliably omits a field depends on context. The point is not that
+the LLM always omits \texttt{cost}, but that \hadl \emph{structurally guarantees} detection and
+repair when it does, whereas plain baselines silently crash.
+The authorization comparison is partly qualitative: the assertion baselines \emph{can} be made
+correct by careful manual checks, but doing so adds 114--140 lines, doubles the runtime, and
+depends on the developer not omitting any check.

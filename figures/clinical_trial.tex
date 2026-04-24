@@ -3,27 +3,27 @@
 @retries 3
 
 workflow clinical_trial() -> String {
-  let trial = ask "Describe the clinical trial"
-  let crf: Schema = gen "Generate a CRF schema for `trial`"
-  let policy: Policy = gen "Coordinators cannot see
-    unblinding data. Safety_board has full access."
+  let trial  = ask "Describe the clinical trial"
+  let crf: Schema   = gen "Generate a CRF schema for `trial`"
+  let policy: Policy = gen "Coordinators cannot see data in
+    unblinded folder. Safety board has full access."
   enforce policy
-  let role = ask "Your role?"
-  let ids: array[String] = gen "List 3 patient IDs"
-  var total: Number = 0
-  for pid in ids {
-    let visit: crf = gen "Generate visit for `pid` in `trial`" as role
-    total = js total + 1
-    say "`visit.patient_id` recorded"
+  let num_visits = ask "How many patient visits to simulate?"
+  let pids: Schema = gen "Return `num_visits` patient IDs"
+  var cost: Number = 0
+  for pid in pids {
+    let visit: crf = gen "Generate a visit for `pid` in `trial`
+      conforming to schema `crf`" as "coordinator"
+    cost = js cost + visit.cost
+    say "Visit `visit.patient_id`: cost `visit.cost`"
   }
-  say "Collected `total` visits"
-  let sae = ask "Adverse event reported?"
-  if (sae == "yes") {
-    agent "Write an SAE narrative" as "coordinator"
-  }
-  agent "Summarize the `total` visits collected in `trial`." as role
+  agent "Write a report for the trial visits" as "safety_board"
 }
 \end{lstlisting}
-\caption{A clinical trial workflow illustrating gradual validation for both types and policies, with \texttt{@retries} activating feedback-driven self-healing.}
+\caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf} typed binding),
+  gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization (\texttt{as} clause).
+  \texttt{@retries 3} activates feedback-driven self-healing: if the generated schema lacks a field
+  accessed later (\texttt{visit.cost}, \texttt{visit.patient\_id}), the runtime retries the causal
+  \texttt{gen} with the violated constraint as feedback before any visit data is collected.}
 \label{fig:clinical-trial}
 \end{figure}
