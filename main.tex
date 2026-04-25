@@ -5,12 +5,25 @@
 \usepackage{listings}
 \usepackage[dvipsnames]{xcolor}
 \lstdefinelanguage{hadl}{
-  keywords={workflow, let, var, gen, agent, ask, say, if, else, while, for, in, type, enforce, eval, as, js},
+  keywords={workflow, let, var, restrict, gen, agent, ask, say, if, else, while, for, in, type, enforce, eval, as, js},
   keywordstyle=\bfseries,
+  morekeywords={root,Array,String,Number,Schema,Policy},
+  keywordstyle=\bfseries\color{green!60!black},
   sensitive=true,
   comment=[l]{//},
   morestring=[b]",
   stringstyle=\itshape,
+  breaklines=true,
+  deletestring=[b]",
+  deletestring=[b]',
+  moredelim=[s][\color{brown!60!black}]{"}{"},
+  moredelim=*[is][\color{green!50!black}\ttfamily\itshape]{`}{`},
+  xleftmargin=\parindent,
+  showstringspaces=false,
+  basicstyle=\small\ttfamily,
+  commentstyle=\itshape\color{red!40!black},
+  identifierstyle=\itshape,
+  escapeinside={<@}{@>}
 }
 \lstset{
   basicstyle=\ttfamily\small,
