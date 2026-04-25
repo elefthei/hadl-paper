@@ -29,17 +29,33 @@ theorem T1_WF_preservation
   | sayStep => exact hwf
   | askStep _ _ =>
       refine ⟨?_, hwf.2⟩
-      show ErrCtx.retries (_ ++ [Event.success]) ≤ retryBudget
+      show ErrCtx.retries [] ≤ retryBudget
       simp [retryBudget]
-  | oracleSuccess _ _ _ =>
+  | agentSuccess _ _ _ =>
       refine ⟨?_, hwf.2⟩
-      show ErrCtx.retries (_ ++ [Event.success]) ≤ retryBudget
+      show ErrCtx.retries [] ≤ retryBudget
       simp [retryBudget]
-  | oracleHealType _ _ _ hbudget => exact ⟨hbudget, hwf.2⟩
-  | oracleHealPol _ hbudget => exact ⟨hbudget, hwf.2⟩
+  | agentHealPol _ hbudget => exact ⟨hbudget, hwf.2⟩
+  | letCongNonheal _ _ ih => exact ih hwf
+  | letGenSuccessNonheal _ _ _ _ =>
+      refine ⟨?_, hwf.2⟩
+      show ErrCtx.retries [] ≤ retryBudget
+      simp [retryBudget]
+  | letGenTypeError _ _ _ _ => exact hwf
+  | letGenBudgetError _ => exact hwf
+  | letGenHealPol _ hbudget => exact ⟨hbudget, hwf.2⟩
+  | letGenSuccessSchema _ _ _ _ =>
+      refine ⟨?_, hwf.2⟩
+      show ErrCtx.retries [] ≤ retryBudget
+      simp [retryBudget]
+  | letGenHealSchema _ _ _ _ hbudget => exact ⟨hbudget, hwf.2⟩
+  | letGenSuccessArrow _ _ _ _ =>
+      refine ⟨?_, hwf.2⟩
+      show ErrCtx.retries [] ≤ retryBudget
+      simp [retryBudget]
+  | letGenHealArrow _ _ _ _ hbudget => exact ⟨hbudget, hwf.2⟩
   | evalSuccess _ => exact hwf
   | enforceInstall _ => exact hwf
-  | letCong _ ih => exact ih hwf
   | ifCong _ ih => exact ih hwf
   | seqCong _ ih => exact ih hwf
   | forCong _ ih => exact ih hwf
@@ -51,37 +67,42 @@ theorem T1_WF_preservation
   | assignWrite _ hrt => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
   | varReadStep _ => exact hwf
 
-/-- Every value has *some* runtime type. Weak typing on records /
-    arrays keeps this unconditional. -/
-private theorem value_typeable : ∀ v : Value, ∃ τ, RtType v τ
-  | .unitV      => ⟨_, .vUnit⟩
-  | .boolV _    => ⟨_, .vBool⟩
-  | .numV  _    => ⟨_, .vNum⟩
-  | .strV  _    => ⟨_, .vStr⟩
-  | .schemaV _  => ⟨_, .vSchema⟩
-  | .polV _     => ⟨_, .vPol⟩
-  | .clos n _body =>
+/-- Every value *other than `errV`* has some runtime type. The
+    `errV` sink is intentionally untypeable: it represents a terminal
+    failure state produced by the uniform let-redex error rules
+    (`letGenTypeError`, `letGenBudgetError`). T2 is therefore weakened
+    to `v ≠ errV → ∃ τ, RtType v τ`. -/
+private theorem value_typeable : ∀ v : Value, v ≠ .errV → ∃ τ, RtType v τ
+  | .unitV,  _   => ⟨_, .vUnit⟩
+  | .boolV _, _  => ⟨_, .vBool⟩
+  | .numV  _, _  => ⟨_, .vNum⟩
+  | .strV  _, _  => ⟨_, .vStr⟩
+  | .schemaV _, _ => ⟨_, .vSchema⟩
+  | .polV _, _   => ⟨_, .vPol⟩
+  | .clos n _body, _ =>
       ⟨.tArrow (List.replicate n .tUnit) .tUnit,
        .vClos (args := List.replicate n .tUnit) (ret := .tUnit)
          (List.length_replicate)⟩
-  | .recV _     => ⟨_, .vRec⟩
-  | .arrV _     => ⟨_, .vArr⟩
+  | .recV _, _   => ⟨_, .vRec⟩
+  | .arrV _, _   => ⟨_, .vArr⟩
+  | .errV, h     => (h rfl).elim
 
 /--
-**T2 (Staged Materialization Soundness).** If a step reduces an
-expression to a value, that value has a runtime type.
+**T2 (Staged Materialization Soundness, weakened).** If a step reduces
+an expression to a value that is not the failure sink `errV`, that
+value has a runtime type.
 
 Statement shape change vs. the pre-refactor version: in the two-sort
 presentation values are a separate inductive, so the post-state
-appears as `.val v` with `v : Value` and the conclusion is
-`∃ τ, RtType v τ`. Equivalent up to isomorphism with the old
-`e'.isValueB = true → ∃ τ, RtType e' τ`.
+appears as `.val v` with `v : Value`. Additionally, `Value.errV` is
+the new failure sink and has no runtime type by design — the
+materialization conclusion is therefore conditional on `v ≠ errV`.
 -/
 theorem T2_staged_materialization
     (O : Oracle) (ec ec' : ErrCtx) (P P' : Policy) (σ σ' : Store) (e e' : Expr) :
     Step O ⟨ec, P, σ, e⟩ ⟨ec', P', σ', e'⟩ →
     e'.isValueB = true →
-    ∃ v, e' = .val v ∧ ∃ τ, RtType v τ := by
+    ∃ v, e' = .val v ∧ (v ≠ .errV → ∃ τ, RtType v τ) := by
   intro _hs hv
   cases e' with
   | val v => exact ⟨v, rfl, value_typeable v⟩
@@ -95,7 +116,7 @@ theorem T3_policy_monotonicity
   intro hs
   induction hs with
   | enforceInstall hinst => exact policyInstall_shrinks _ _ _ hinst
-  | letCong _ ih => exact ih
+  | letCongNonheal _ _ ih => exact ih
   | ifCong _ ih => exact ih
   | seqCong _ ih => exact ih
   | forCong _ ih => exact ih

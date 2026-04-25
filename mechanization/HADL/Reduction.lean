@@ -98,38 +98,165 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   | sayStep {ec P σ s} :
       Step O ⟨ec, P, σ, .say s⟩ ⟨ec, P, σ, .val .unitV⟩
 
-  /-- Oracle ask: consult `O`, append success event. -/
+  /-- Oracle ask: consult `O`, flush heal context to `[]` on success
+      (per `hadl-formal.md`: Σ stores only errors and becomes empty on
+      a successful oracle step). -/
   | askStep {ec P σ s v}
       (horacle : O s ec .tString v)
       (hrt : RtType v .tString) :
-      Step O ⟨ec, P, σ, .ask s⟩ ⟨ec ++ [Event.success], P, σ, .val v⟩
+      Step O ⟨ec, P, σ, .ask s⟩ ⟨[], P, σ, .val v⟩
 
-  -- Unified oracle rules (gen / agent).
+  -- Standalone agent rules.
+  --
+  -- `agent s π` materializes `tString`, which is `¬ Ty.healable`, so it
+  -- has no self-heal-by-type rule. It keeps a success rule and a
+  -- policy-denial heal rule, mirroring the let-redex story for
+  -- non-healable types but without going through a let-redex.
+  -- (Conceptually, `agent s π` is shorthand for
+  -- `let _ : String = agent s π ; ()`.)
 
-  /-- Unified `gen`/`agent` success rule when oracle returns a well-typed
-      value AND policy allows. -/
-  | oracleSuccess {ec P σ v} {a : OAction}
-      (hauth   : policyAllows P a.princ a.eff)
-      (horacle : O a.stmt ec a.ty v)
-      (hrt     : RtType v a.ty) :
-      Step O ⟨ec, P, σ, a.toExpr⟩ ⟨ec ++ [Event.success], P, σ, .val v⟩
+  /-- `agent` success: oracle returns a well-typed string and policy
+      allows; flush heal context to `[]`. -/
+  | agentSuccess {ec P σ v s π}
+      (hauth   : policyAllows P π .agent)
+      (horacle : O s ec .tString v)
+      (hrt     : RtType v .tString) :
+      Step O ⟨ec, P, σ, .agent s π⟩ ⟨[], P, σ, .val v⟩
 
-  /-- Type-heal: oracle returned an ill-typed value within budget; record
-      error, retry. -/
-  | oracleHealType {ec P σ v} {a : OAction}
-      (hauth   : policyAllows P a.princ a.eff)
-      (horacle : O a.stmt ec a.ty v)
-      (hbad    : ¬ RtType v a.ty)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explain a v)]) ≤ retryBudget) :
-      Step O ⟨ec, P, σ, a.toExpr⟩
-             ⟨ec ++ [Event.error (explain a v)], P, σ, a.toExpr⟩
+  /-- `agent` policy-heal: policy denied within budget; record error and
+      retry. -/
+  | agentHealPol {ec P σ s π}
+      (hdeny   : ¬ policyAllows P π .agent)
+      (hbudget : ErrCtx.retries
+                   (ec ++ [Event.error (explainPolicy (.agent s π) P)])
+                   ≤ retryBudget) :
+      Step O ⟨ec, P, σ, .agent s π⟩
+             ⟨ec ++ [Event.error (explainPolicy (.agent s π) P)], P, σ,
+              .agent s π⟩
 
-  /-- Policy-heal: policy denied action within budget; record error, retry. -/
-  | oracleHealPol {ec P σ} {a : OAction}
-      (hdeny   : ¬ policyAllows P a.princ a.eff)
-      (hbudget : ErrCtx.retries (ec ++ [Event.error (explainPolicy a P)]) ≤ retryBudget) :
-      Step O ⟨ec, P, σ, a.toExpr⟩
-             ⟨ec ++ [Event.error (explainPolicy a P)], P, σ, a.toExpr⟩
+  -- Let-redex rules for `gen τ s π`.
+  --
+  -- `gen` is NOT a standalone redex anymore — it only reduces as the
+  -- immediate RHS of a `let`. Per `hadl-formal.md`:
+  --   * Success flushes `ec` to `[]` (not `ec ++ [Event.success]`).
+  --   * Self-heal at healable τ is driven by *continuation* typing
+  --     failure, not by value typing failure.
+  --   * Value typing failure at healable τ has NO rule — the
+  --     configuration is stuck by omission; progress (T4c) rules it
+  --     out under eventually-truthful oracle.
+  -- The Schema-specific constructors below implement this; Policy and
+  -- Arrow triads follow the same pattern in Phases 2/3.
+
+  /-- Let-context congruence at non-healable types. At a healable τ,
+      the RHS of the let must be `gen s π` or already a value, so no
+      generic congruence applies. -/
+  | letCongNonheal {ec ec' P P' σ σ' τ e₁ e₁' e₂}
+      (hheal : Ty.healable τ = false)
+      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
+      Step O ⟨ec, P, σ, .letE τ e₁ e₂⟩ ⟨ec', P', σ', .letE τ e₁' e₂⟩
+
+  /-- Let-redex success at non-healable τ: oracle returned a well-typed
+      value at a non-healable type, policy allows; flush, substitute and
+      continue. -/
+  | letGenSuccessNonheal {ec P σ τ s π v p}
+      (hheal   : Ty.healable τ = false)
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec τ v)
+      (hrt     : RtType v τ) :
+      Step O ⟨ec, P, σ, .letE τ (.gen τ s π) p⟩
+             ⟨[], P, σ, p.instantiate v⟩
+
+  /-- Let-redex hard TypeError at non-healable τ: oracle returned
+      ill-typed value. Steps to `errV` — terminal failure. Only fires
+      at non-healable τ; at healable τ value-fail has no rule. -/
+  | letGenTypeError {ec P σ τ s π v p}
+      (hheal   : Ty.healable τ = false)
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec τ v)
+      (hbad    : ¬ RtType v τ) :
+      Step O ⟨ec, P, σ, .letE τ (.gen τ s π) p⟩
+             ⟨ec, P, σ, .val .errV⟩
+
+  /-- Let-redex hard BudgetError (uniform across all τ): retries
+      exhausted. Doesn't consult the oracle — fires immediately as soon
+      as `retries(ec) > retryBudget`. -/
+  | letGenBudgetError {ec P σ τ s π p}
+      (hover : ErrCtx.retries ec > retryBudget) :
+      Step O ⟨ec, P, σ, .letE τ (.gen τ s π) p⟩
+             ⟨ec, P, σ, .val .errV⟩
+
+  /-- Let-redex policy-heal (uniform across all τ): policy denied gen
+      action; record error and retry. -/
+  | letGenHealPol {ec P σ τ s π p}
+      (hdeny   : ¬ policyAllows P π .gen)
+      (hbudget : ErrCtx.retries
+                   (ec ++ [Event.error (explainPolicy (.gen τ s π) P)])
+                   ≤ retryBudget) :
+      Step O ⟨ec, P, σ, .letE τ (.gen τ s π) p⟩
+             ⟨ec ++ [Event.error (explainPolicy (.gen τ s π) P)], P, σ,
+              .letE τ (.gen τ s π) p⟩
+
+  -- Schema triad (Phase 1), continuation-driven per hadl-formal.md.
+
+  /-- Let-redex success at Schema: oracle returned a well-typed Schema
+      value AND the continuation `p` statically types at `τ'` under the
+      extension `[var 0 : Schema]`. Flush heal context to `[]` and
+      commit by substitution. -/
+  | letGenSuccessSchema {ec P σ s π v p τ'}
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec .tSchema v)
+      (hrt     : RtType v .tSchema)
+      (hpok    : StaticTypeOK .tSchema p τ') :
+      Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s π) p⟩
+             ⟨[], P, σ, p.instantiate v⟩
+
+  /-- Let-redex self-heal at Schema: oracle returned a well-typed Schema
+      value, BUT the continuation fails to type-check at some τ' under
+      `[var 0 : Schema]`. Record the continuation's feedback string ε
+      and retry the same redex within budget. -/
+  | letGenHealSchema {ec P σ s π v p τ' ε}
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec .tSchema v)
+      (hrt     : RtType v .tSchema)
+      (hperr   : ¬ StaticTypeOK .tSchema p τ')
+      (hbudget : ErrCtx.retries (ec ++ [Event.error ε]) ≤ retryBudget) :
+      Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s π) p⟩
+             ⟨ec ++ [Event.error ε], P, σ,
+              .letE .tSchema (.gen .tSchema s π) p⟩
+
+  -- Arrow triad (Phase 3), continuation-driven (mirrors Schema).
+  -- Only difference from the Schema rules is the materialization type
+  -- (`tArrow args ret`). The capture-avoiding substitution `p.instantiate v`
+  -- is provided uniformly by `lean-subst` for any value `v`, including the
+  -- closure values produced by the oracle at arrow types.
+
+  /-- Let-redex success at arrow type: oracle returned a well-typed
+      workflow value AND the continuation `p` statically types at `τ'`
+      under `[var 0 : tArrow args ret]`. Flush heal context to `[]`
+      and commit by substitution. -/
+  | letGenSuccessArrow {ec P σ args ret s π v p τ'}
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec (.tArrow args ret) v)
+      (hrt     : RtType v (.tArrow args ret))
+      (hpok    : StaticTypeOK (.tArrow args ret) p τ') :
+      Step O ⟨ec, P, σ,
+              .letE (.tArrow args ret) (.gen (.tArrow args ret) s π) p⟩
+             ⟨[], P, σ, p.instantiate v⟩
+
+  /-- Let-redex self-heal at arrow type: well-typed workflow value,
+      but the continuation fails to type-check at some τ' under
+      `[var 0 : tArrow args ret]`. Record the continuation's feedback
+      string ε and retry the same redex within budget. -/
+  | letGenHealArrow {ec P σ args ret s π v p τ' ε}
+      (hauth   : policyAllows P π .gen)
+      (horacle : O s ec (.tArrow args ret) v)
+      (hrt     : RtType v (.tArrow args ret))
+      (hperr   : ¬ StaticTypeOK (.tArrow args ret) p τ')
+      (hbudget : ErrCtx.retries (ec ++ [Event.error ε]) ≤ retryBudget) :
+      Step O ⟨ec, P, σ,
+              .letE (.tArrow args ret) (.gen (.tArrow args ret) s π) p⟩
+             ⟨ec ++ [Event.error ε], P, σ,
+              .letE (.tArrow args ret) (.gen (.tArrow args ret) s π) p⟩
 
   -- Eval: closure application.
 
@@ -149,11 +276,11 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       Step O ⟨ec, P, σ, .enforce (.val (.polV p))⟩ ⟨ec, P', σ, .val .unitV⟩
 
   -- CBV congruence.
-
-  /-- Let-context congruence: step under `letE _ □ _`. -/
-  | letCong {ec ec' P P' σ σ' τ e₁ e₁' e₂}
-      (h : Step O ⟨ec, P, σ, e₁⟩ ⟨ec', P', σ', e₁'⟩) :
-      Step O ⟨ec, P, σ, .letE τ e₁ e₂⟩ ⟨ec', P', σ', .letE τ e₁' e₂⟩
+  --
+  -- Note: the generic `letCong` rule is removed in favor of
+  -- `letCongNonheal` above, which fires only when `Ty.healable τ`
+  -- is `false`. At healable τ, the let-redex must be `letE τ (.gen τ s π) _`
+  -- or already a value, so no generic congruence applies.
 
   /-- If-context congruence: step under `ifE □ _ _`. -/
   | ifCong {ec ec' P P' σ σ' e₁ e₁' e₂ e₃}

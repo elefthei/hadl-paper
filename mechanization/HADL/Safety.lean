@@ -11,51 +11,51 @@ import HADL.Reduction
 
 namespace HADL
 
-/-- **T4a (Budget → No Heal).** Under the new substitution-based semantics
-    there is no `genBudgetExhausted` constructor: a stuck `gen` redex with
-    exhausted budget simply has no heal transition.  The `oracleSuccess`
-    rule can still fire independently of the budget (it appends
-    `Event.success`, resetting retries), so we cannot claim the redex is
-    globally stuck.  The *weakened* claim is: any transition from a
-    budget-exhausted `gen` redex must be an `oracleSuccess` step, i.e. the
-    resulting error context is `ec ++ [Event.success]`.  This is the
-    analogue of the old `T4_budget_progress` — "no heal rule fires when
-    the budget is exhausted" — adapted to the unified `OAction` rules.
-
-    Renamed from `T4_budget_progress` because the original claim
-    (`¬ ∃ C', Step …`) is false on the new semantics (a truthful oracle can
-    always drive `oracleSuccess`). -/
+/-- **T4a (Budget → No Heal).** With `gen` no longer a standalone redex,
+    the standalone `gen τ s π` has *no* transitions at all. (`gen` only
+    reduces inside a let-redex.) So the conclusion holds vacuously. -/
 theorem T4_budget_no_heal
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (τ : Ty) (s : String) (π : Principal)
-    (hover : ErrCtx.retries ec > retryBudget) :
+    (_hover : ErrCtx.retries ec > retryBudget) :
     ∀ C', Step O ⟨ec, P, σ, .gen τ s π⟩ C' →
-          ∃ v, C' = ⟨ec ++ [Event.success], P, σ, v⟩ := by
+          ∃ v, C' = ⟨[], P, σ, v⟩ := by
   intro C' h
-  generalize hE : (Expr.gen τ s π : Expr) = eG at h
-  cases h <;> try cases hE
-  case oracleSuccess a _ _ _ =>
-      cases a
-      · exact ⟨_, rfl⟩
-      · cases hE
-  case oracleHealType a _ _ _ hbudget =>
-      cases a
-      · rename_i hb; rw [ErrCtx.retries_append_error] at hb; omega
-      · cases hE
-  case oracleHealPol a _ hbudget =>
-      cases a
-      · rw [ErrCtx.retries_append_error] at hbudget; omega
-      · cases hE
+  -- `.gen τ s π` is no longer a standalone redex; no rule fires.
+  cases h
 
 /-- **T4b (Truthful Success).** If the oracle is eventually truthful for a
-    `gen` site and the policy allows the action, there exists an error
-    context and store from which a successful `oracleSuccess` step fires. -/
+    `gen` site, the policy allows the action, AND τ is Schema (Phase 1
+    coverage; Policy & Arrow extend in Phases 2 & 3), there exists an
+    error context and store from which a successful let-redex step
+    fires from `let _ : .tSchema = gen .tSchema s π ; var 0`.
+    The continuation `.var 0` types trivially at `.tSchema` via
+    `StaticTypeOK.var0`. -/
 theorem T4_truthful_success
-    (O : Oracle) (P : Policy) (τ : Ty) (s : String) (π : Principal)
+    (O : Oracle) (P : Policy) (s : String) (π : Principal)
     (hauth : policyAllows P π .gen)
-    (htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
-    ∃ ec σ C', Step O ⟨ec, P, σ, .gen τ s π⟩ C' := by
+    (htruth : Oracle.eventuallyTruthful O retryBudget s .tSchema (fun _ => True)) :
+    ∃ ec σ C',
+      Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s π) (.var 0)⟩ C' := by
   obtain ⟨_σ, _hlen, v, _hv_mem, ⟨ec, hO⟩, hrt, _⟩ := htruth
-  refine ⟨ec, Store.empty, ⟨ec ++ [Event.success], P, Store.empty, .val v⟩, ?_⟩
-  exact Step.oracleSuccess (a := OAction.gen τ s π) hauth hO hrt
+  exact ⟨ec, Store.empty, _,
+         Step.letGenSuccessSchema hauth hO hrt StaticTypeOK.var0⟩
+
+/-- **T4b-Arrow (Truthful Success at arrow type).** Phase 3 analogue of
+    `T4_truthful_success`: same existential shape, type generalized to
+    `tArrow args ret`. Continuation `.var 0` types via the universally-
+    quantified `StaticTypeOK.var0`. -/
+theorem T4_truthful_success_arrow
+    (O : Oracle) (P : Policy) (args : List Ty) (ret : Ty)
+    (s : String) (π : Principal)
+    (hauth : policyAllows P π .gen)
+    (htruth : Oracle.eventuallyTruthful O retryBudget s
+                (.tArrow args ret) (fun _ => True)) :
+    ∃ ec σ C',
+      Step O ⟨ec, P, σ,
+              .letE (.tArrow args ret)
+                    (.gen (.tArrow args ret) s π) (.var 0)⟩ C' := by
+  obtain ⟨_σ, _hlen, v, _hv_mem, ⟨ec, hO⟩, hrt, _⟩ := htruth
+  exact ⟨ec, Store.empty, _,
+         Step.letGenSuccessArrow hauth hO hrt StaticTypeOK.var0⟩
 
 end HADL

@@ -35,12 +35,19 @@ theorem Step.policy_shrinks {O : Oracle} {C C' : Config}
   | jsStep _                 => exact fun _ hp => hp
   | sayStep                  => exact fun _ hp => hp
   | askStep _ _              => exact fun _ hp => hp
-  | oracleSuccess _ _ _      => exact fun _ hp => hp
-  | oracleHealType _ _ _ _   => exact fun _ hp => hp
-  | oracleHealPol _ _        => exact fun _ hp => hp
+  | agentSuccess _ _ _       => exact fun _ hp => hp
+  | agentHealPol _ _         => exact fun _ hp => hp
+  | letCongNonheal _ _ ih    => exact ih
+  | letGenSuccessNonheal _ _ _ _ => exact fun _ hp => hp
+  | letGenTypeError _ _ _ _  => exact fun _ hp => hp
+  | letGenBudgetError _      => exact fun _ hp => hp
+  | letGenHealPol _ _        => exact fun _ hp => hp
+  | letGenSuccessSchema _ _ _ _ => exact fun _ hp => hp
+  | letGenHealSchema _ _ _ _ _ => exact fun _ hp => hp
+  | letGenSuccessArrow _ _ _ _ => exact fun _ hp => hp
+  | letGenHealArrow _ _ _ _ _ => exact fun _ hp => hp
   | evalSuccess _            => exact fun _ hp => hp
   | enforceInstall hinst     => exact policyInstall_shrinks _ _ _ hinst
-  | letCong _ ih             => exact ih
   | ifCong _ ih              => exact ih
   | seqCong _ ih             => exact ih
   | forCong _ ih             => exact ih

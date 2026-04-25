@@ -68,6 +68,13 @@ inductive Value where
   | arrV    : List Value → Value
   /-- Closure with `n` de-Bruijn-bound parameters and expression body. -/
   | clos    : Nat → Expr → Value
+  /-- Hard-error sink value. Produced only by the uniform let-redex
+      error rules (`letGenTypeError`, `letGenBudgetError`). It has NO
+      runtime type — `RtType errV τ` is false for every τ — so a
+      configuration whose expression is `.val errV` is a terminal
+      failure state, not a typeable value. T2 is therefore weakened to
+      `v ≠ errV → ∃ τ, RtType v τ`. -/
+  | errV    : Value
 
 inductive Expr where
   /-- Embedded value (the `Value ↪ Expr` injection). -/
@@ -165,6 +172,7 @@ def Value.rmap (r : Ren) : Value → Value
   | .recV xs    => .recV (Value.rmapRec r xs)
   | .arrV vs    => .arrV (Value.rmapList r vs)
   | .clos n body => .clos n (Expr.rmap (Ren.liftN r n) body)
+  | .errV       => .errV
 
 def Value.rmapList (r : Ren) : List Value → List Value
   | List.nil       => List.nil
@@ -227,6 +235,7 @@ def Value.smap (σ : Subst Expr) : Value → Value
   | .recV xs    => .recV (Value.smapRec σ xs)
   | .arrV vs    => .arrV (Value.smapList σ vs)
   | .clos n body => .clos n (Expr.smap (Subst.liftN σ n) body)
+  | .errV       => .errV
 
 def Value.smapList (σ : Subst Expr) : List Value → List Value
   | List.nil       => List.nil

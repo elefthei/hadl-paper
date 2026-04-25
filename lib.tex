@@ -67,30 +67,55 @@
 \newcommand{\Trec}[1]{\{\,#1\,\}}
 \newcommand{\Tarr}[1]{\texttt{array}[#1]}
 \newcommand{\Tref}[1]{#1}
+% Healable type predicate.
+\newcommand{\Healable}[1]{\mathsf{healable}(#1)}
+% Hard-error sink value produced by \rulename{Let-Gen-TypeError} and
+% \rulename{Let-Gen-BudgetError}; intentionally untypeable.
+\newcommand{\errV}{\bot_{\mathsf{err}}}
+\newcommand{\unit}{\texttt{()}}
 
 %%%%%%%%%%%%% HADL formal model — expressions (de-Bruijn, substitution-based)
 \newcommand{\Ask}[1]{\texttt{ask}\;#1}
 \newcommand{\Say}[1]{\texttt{say}\;#1}
-% gen carries its principal in-syntax: \Gen{τ}{s}{π}
-\newcommand{\Gen}[3]{\texttt{gen}_{#1}\;#2\;\texttt{as}\;#3}
+% gen: surface syntax is `gen s as π`; the type annotation lives on the
+% enclosing `let x : τ = gen s as π`. We keep τ as a macro argument for
+% machinery (every call site threads τ) but do not render it, to match
+% fig:syntax.
+\newcommand{\Gen}[3]{\texttt{gen}\;#2\;\texttt{as}\;#3}
 % agent carries its principal in-syntax: \Agent{s}{π}
 \newcommand{\Agent}[2]{\texttt{agent}\;#1\;\texttt{as}\;#2}
-\newcommand{\Eval}[2]{\texttt{eval}\;#1\;#2}
+\newcommand{\Eval}[2]{\texttt{eval}\;#1\,(#2)}
 \newcommand{\Clos}[2]{\lambda^{#1}.\,#2}
 \newcommand{\Enforce}[1]{\texttt{enforce}\;#1}
 \newcommand{\Js}[1]{\texttt{js}\;#1}
-% De-Bruijn let: body has one binder — \Let{τ}{e_1}{e_2}.
-\newcommand{\Let}[3]{\texttt{let}_{#1}\;#2\;\texttt{in}\;#3}
+% De-Bruijn let: body has one binder. Rendered with a placeholder name `x` to
+% match fig:syntax's `let x : T = e in e'` form; the bound occurrence is
+% index 0 in the body.
+\newcommand{\Let}[3]{\texttt{let}\; x\,{:}\,#1 = #2\;\texttt{in}\;#3}
 \newcommand{\Iff}[3]{\texttt{if}\;(#1)\;\{#2\}\;\texttt{else}\;\{#3\}}
 \newcommand{\Whl}[2]{\texttt{while}\;(#1)\;\{#2\}}
-% De-Bruijn for: body has one binder — \Forr{arr}{e}.
-\newcommand{\Forr}[2]{\texttt{for}\;#1\;\{#2\}}
+% De-Bruijn for: body has one binder (index 0). Rendered with a placeholder
+% name `x` to match fig:syntax's `for x in e {e'}` form.
+\newcommand{\Forr}[2]{\texttt{for}\;x\;\texttt{in}\;#1\;\{#2\}}
 \newcommand{\Seq}[2]{#1\,;\,#2}
 
 %%%%%%%%%%%%% HADL formal model — judgments
-% RtType is now envless: v : τ.
+% RtType is now envless: v : τ. Kept as shorthand for the ok-branch of
+% the type-check judgment \TJok on a closed value.
 \newcommand{\RtType}[2]{#1 : #2}
 \newcommand{\StType}[2]{\vdash #1 : #2}
+% Typing-context metavariable for the schema-name environment.
+\newcommand{\Gctx}{\Gamma}
+% Type-check judgment — single-valued, returns either \mathsf{ok} (success)
+% or \mathsf{err}(ε) where ε is the typing-error string fed back to the
+% oracle during self-healing. Applies to both values (runtime recheck of
+% an oracle response) and expressions (continuation check that drives
+% self-heal per hadl-formal.md). Matches hadl-formal.md.
+\newcommand{\TJok}[3]{#1 \vdash #2 : #3 \;\Rightarrow\; \mathsf{ok}}
+\newcommand{\TJerr}[4]{#1 \vdash #2 : #3 \;\Rightarrow\; \mathsf{err}(#4)}
+% Context extension \Gamma, x : \tau used in continuation-driven heal
+% rules. Paired with \TJok / \TJerr to type-check the continuation p.
+\newcommand{\Gext}[2]{\Gctx,\, #1 : #2}
 \newcommand{\PolOk}[3]{#1;\,#2 \vdash #3 : \mathsf{ok}}
 \newcommand{\WF}[1]{\vdash #1 : \mathsf{wf}}
 

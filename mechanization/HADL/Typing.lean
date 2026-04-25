@@ -30,6 +30,64 @@ inductive RtType : Value → Ty → Prop where
   /-- Array values have *some* array type, similarly black-boxed. -/
   | vArr {vs} : RtType (.arrV vs) (.tArray .tUnit)
 
+/-! ### Healable types.
+
+    A type is healable iff `gen` can produce it as a first-class value
+    that the runtime re-checks (Schema, Policy, Arrow) — or is a
+    Record/Array containing a healable component (any nested
+    materialization site still requires self-healing).
+
+    Base scalar types (Unit, Bool, Number, String) are NOT healable;
+    let-redexes at these types use the uniform success / type-error
+    rules instead.
+
+    `Ty.healable` is the only predicate. There is no `simple` shorthand;
+    rules and proofs spell out `¬ Ty.healable τ` directly. -/
+
+/-- Healable types: the materialization targets that admit a self-heal
+    retry loop in the let-redex reduction rules. Defined by
+    well-founded recursion on `sizeOf`; the `tRecord` case scans the
+    field list and recurses on each field's type, each of which is
+    structurally smaller. -/
+def Ty.healable : Ty → Bool
+  | .tSchema      => true
+  | .tPolicy      => true
+  | .tArrow _ _   => true
+  | .tRecord fs   =>
+      fs.attach.any (fun kv => Ty.healable kv.val.2)
+  | .tArray τ'    => Ty.healable τ'
+  | .tUnit        => false
+  | .tBool        => false
+  | .tNumber      => false
+  | .tString      => false
+decreasing_by
+  all_goals first
+    | (simp_wf
+       have h := List.sizeOf_lt_of_mem kv.property
+       have h2 : sizeOf kv.val.snd < sizeOf kv.val := by
+         rcases kv with ⟨⟨a, b⟩, _⟩; simp; omega
+       omega)
+    | simp_wf
+    | (simp_wf; omega)
+
+/-- Static typeability of expressions under a single-variable context.
+    `StaticTypeOK τbind p τret` witnesses that `p` type-checks at `τret`
+    when de-Bruijn `var 0` is bound at `τbind`. Black-boxed like
+    `StType` above: only the cases Soundness/Safety need are exposed.
+    Used as the continuation-check premise in the healable-τ self-heal
+    rules (Schema today; Policy/Arrow in Phases 2/3), per the
+    continuation-driven healing rule in `hadl-formal.md`. -/
+inductive StaticTypeOK : Ty → Expr → Ty → Prop where
+  /-- `var 0` has the type it was bound at — the witness needed for
+      `T4_truthful_success` on `let _ : τ = gen τ s π ; var 0`. -/
+  | var0 {τ} : StaticTypeOK τ (.var 0) τ
+  /-- Any expression is typeable at Schema by the residual static-type
+      black-box; parallels `StType.schemaWildcard`. -/
+  | schemaWildcard {τbind e} : StaticTypeOK τbind e .tSchema
+  /-- Any value expression is typeable at any type; parallels
+      `StType.valueWildcard`. -/
+  | valueWildcard {τbind v τ} : StaticTypeOK τbind (.val v) τ
+
 /-- Static typing over closed expressions. Black-boxed: the paper
     re-runs the structural checker and Lean treats acceptance as an
     opaque relation. We expose only the cases Soundness needs. -/
