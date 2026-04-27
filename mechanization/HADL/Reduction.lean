@@ -280,7 +280,8 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       interpreted relative to the static entity store `E` of the
       typing derivation, not against any runtime environment, so no
       substitution is performed. -/
-  | letPrincValue {ec P σ b v} :
+  | letPrincValue {ec P σ b v}
+      (hv : Value.princOk 0 v = true) :
       Step O ⟨ec, P, σ, .letPrinc b (.val v)⟩
              ⟨ec, P, σ, .val v⟩
 
@@ -330,9 +331,12 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       Step O ⟨ec, P, σ, .varDecl x τ e1 e2⟩
              ⟨ec', P', σ', .varDecl x τ e1' e2⟩
 
-  /-- Declare a new store cell at a well-typed value. -/
+  /-- Declare a new store cell at a well-typed value.
+      Stored values must be closed (`princOk 0`) so the store invariant
+      is preserved across `letPrinc` boundaries. -/
   | varDeclBind {ec P σ x τ v e2}
-      (hrt : RtType v τ) :
+      (hrt : RtType v τ)
+      (hv  : Value.princOk 0 v = true) :
       Step O ⟨ec, P, σ, .varDecl x τ (.val v) e2⟩
              ⟨ec, P, σ.set x τ v, e2⟩
 
@@ -341,10 +345,13 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       (h : Step O ⟨ec, P, σ, e⟩ ⟨ec', P', σ', e'⟩) :
       Step O ⟨ec, P, σ, .assign x e⟩ ⟨ec', P', σ', .assign x e'⟩
 
-  /-- Assign to an existing store cell (type-checked). -/
+  /-- Assign to an existing store cell (type-checked).
+      Stored values must be closed (`princOk 0`) so the store invariant
+      is preserved across `letPrinc` boundaries. -/
   | assignWrite {ec P σ x v τ vOld}
       (hbound : σ x = some (τ, vOld))
-      (hrt : RtType v τ) :
+      (hrt    : RtType v τ)
+      (hv     : Value.princOk 0 v = true) :
       Step O ⟨ec, P, σ, .assign x (.val v)⟩
              ⟨ec, P, σ.set x τ v, .val .unitV⟩
 

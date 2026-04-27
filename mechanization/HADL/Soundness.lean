@@ -51,7 +51,7 @@ theorem T1_WF_preservation
   | letGenHealRecordFields _ _ _ _ _ _ hbudget => exact ⟨hbudget, hwf.2⟩
   | evalSuccess _ => exact hwf
   | enforceInstall _ => exact hwf
-  | letPrincValue => exact hwf
+  | letPrincValue _ => exact hwf
   | letPrincCong _ ih => exact ih hwf
   | ifCong _ ih => exact ih hwf
   | seqCong _ ih => exact ih hwf
@@ -59,9 +59,9 @@ theorem T1_WF_preservation
   | enforceCong _ ih => exact ih hwf
   | evalFunCong _ ih => exact ih hwf
   | varDeclEval _ ih => exact ih hwf
-  | varDeclBind hrt => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
+  | varDeclBind hrt _ => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
   | assignEval _ ih => exact ih hwf
-  | assignWrite _ hrt => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
+  | assignWrite _ hrt _ => exact ⟨hwf.1, Store.set_WF hwf.2 hrt⟩
   | varReadStep _ => exact hwf
   | projCong _ ih => exact ih hwf
   | projStep _ => exact hwf
@@ -175,7 +175,7 @@ theorem T2_staged_materialization
       obtain ⟨v', heq⟩ := exists_val_of_isValueB hv
       exact ⟨v', heq, value_typeable v'⟩
   | enforceInstall _ => exact ⟨.unitV, rfl, fun _ => ⟨_, .vUnit⟩⟩
-  | letPrincValue => exact ⟨_, rfl, value_typeable _⟩
+  | letPrincValue _ => exact ⟨_, rfl, value_typeable _⟩
   | letPrincCong _ _ => simp [Expr.isValueB] at hv
   | ifCong _ _ => simp [Expr.isValueB] at hv
   | seqCong _ _ => simp [Expr.isValueB] at hv
@@ -183,11 +183,11 @@ theorem T2_staged_materialization
   | enforceCong _ _ => simp [Expr.isValueB] at hv
   | evalFunCong _ _ => simp [Expr.isValueB] at hv
   | varDeclEval _ _ => simp [Expr.isValueB] at hv
-  | varDeclBind _ =>
+  | varDeclBind _ _ =>
       obtain ⟨v', heq⟩ := exists_val_of_isValueB hv
       exact ⟨v', heq, value_typeable v'⟩
   | assignEval _ _ => simp [Expr.isValueB] at hv
-  | assignWrite _ _ => exact ⟨.unitV, rfl, fun _ => ⟨_, .vUnit⟩⟩
+  | assignWrite _ _ _ => exact ⟨.unitV, rfl, fun _ => ⟨_, .vUnit⟩⟩
   | varReadStep _ => exact ⟨_, rfl, value_typeable _⟩
   | projCong _ _ => simp [Expr.isValueB] at hv
   | projStep _ => exact ⟨_, rfl, value_typeable _⟩
@@ -223,7 +223,7 @@ theorem T3_policy_monotonicity
   | letGenHealRecordFields _ _ _ _ _ _ _ => exact Set.Subset.rfl
   | evalSuccess _ => exact Set.Subset.rfl
   | enforceInstall hinst => exact policyInstall_shrinks _ _ _ hinst
-  | letPrincValue => exact Set.Subset.rfl
+  | letPrincValue _ => exact Set.Subset.rfl
   | letPrincCong _ ih => exact ih
   | ifCong _ ih => exact ih
   | seqCong _ ih => exact ih
@@ -231,9 +231,9 @@ theorem T3_policy_monotonicity
   | enforceCong _ ih => exact ih
   | evalFunCong _ ih => exact ih
   | varDeclEval _ ih => exact ih
-  | varDeclBind _ => exact Set.Subset.rfl
+  | varDeclBind _ _ => exact Set.Subset.rfl
   | assignEval _ ih => exact ih
-  | assignWrite _ _ => exact Set.Subset.rfl
+  | assignWrite _ _ _ => exact Set.Subset.rfl
   | varReadStep _ => exact Set.Subset.rfl
   | projCong _ ih => exact ih
   | projStep _ => exact Set.Subset.rfl
