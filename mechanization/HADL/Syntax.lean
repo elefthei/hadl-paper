@@ -76,6 +76,7 @@ inductive Ty where
   | tString : Ty
   | tSchema : Ty
   | tPolicy : Ty
+  | tPrincipal : Ty
   | tArrow  : List Ty → Ty → Ty
   | tRecord : List (String × Ty) → Ty
   | tArray  : Ty → Ty
@@ -112,6 +113,11 @@ inductive Value where
   | schemaV : Ty → Value
   /-- First-class policy value. -/
   | polV    : PolicyValue → Value
+  /-- First-class principal value: a frozen `PrincRef` pointing into
+      the entity store at the point of capture. Introduced when a
+      principal binder is materialized for use as a `gen`/`agent`
+      argument; carries no data beyond the resolved index. -/
+  | principalV : PrincRef → Value
   /-- Record value: list of (field-name, value) pairs. -/
   | recV    : List (String × Value) → Value
   /-- Array value: homogeneous(ish) list of values. -/
@@ -234,6 +240,7 @@ def Value.rmap (r : Ren) : Value → Value
   | .strV  s    => .strV  s
   | .schemaV τ  => .schemaV τ
   | .polV p     => .polV p
+  | .principalV pr => .principalV (PrincRef.rmap r pr)
   | .recV xs    => .recV (Value.rmapRec r xs)
   | .arrV vs    => .arrV (Value.rmapList r vs)
   | .clos n body => .clos n (Expr.rmap (Ren.liftN r n) body)
@@ -311,6 +318,7 @@ def Value.smap (σ : Subst Expr) : Value → Value
   | .strV  s    => .strV  s
   | .schemaV τ  => .schemaV τ
   | .polV p     => .polV p
+  | .principalV pr => .principalV (PrincRef.smap σ pr)
   | .recV xs    => .recV (Value.smapRec σ xs)
   | .arrV vs    => .arrV (Value.smapList σ vs)
   | .clos n body => .clos n (Expr.smap (Subst.liftN σ n) body)
@@ -424,6 +432,112 @@ def Value.recordSatisfies : Value → List String → Bool
 @[simp] theorem Value.recordSatisfies_var0 (v : Value) :
     Value.recordSatisfies v ((Expr.var 0).fieldSitesAt 0) = true := by
   simp [Expr.fieldSitesAt]
+
+/-! ## Principal scope well-formedness (Phase N).
+
+    `PrincRef.bvar n` is in-scope iff `n < depth`, where `depth` is the
+    number of enclosing `letPrinc` binders. Threaded through every
+    Expr / Value constructor; principal binders (`letPrinc`) increment
+    depth, every other Expr-binder leaves depth alone (Expr-level vars
+    live in a separate de Bruijn scope).
+
+    A closed top-level program is `Expr.princOk 0`; the static checker
+    rejects programs whose `WellScoped` predicate does not evaluate to
+    `true`. The scope-preservation lemma `Step.preserves_princOk`
+    (Soundness) proves that this Boolean is preserved by every
+    reduction rule, giving the resolution invariant: every PrincRef
+    reachable at runtime points into the dynamic entity store. -/
+
+/-- A `bvar n` is in scope iff `n < depth`. -/
+def PrincRef.princOk (depth : Nat) : PrincRef → Bool
+  | .bvar n => n < depth
+
+/-- `root` is the unrestricted top-level binder; `restrict pr`
+    reuses an existing principal whose `pr` must be in scope. -/
+def PrincBinder.princOk (depth : Nat) : PrincBinder → Bool
+  | .root        => true
+  | .restrict pr => pr.princOk depth
+
+mutual
+
+/-- Principal-scope well-formedness for values. Recursively all
+    embedded `principalV`/closure bodies must satisfy `princOk`. -/
+def Value.princOk (depth : Nat) : Value → Bool
+  | .unitV         => true
+  | .boolV _       => true
+  | .numV _        => true
+  | .strV _        => true
+  | .schemaV _     => true
+  | .polV _        => true
+  | .principalV pr => pr.princOk depth
+  | .recV xs       => Value.princOkRec depth xs
+  | .arrV vs       => Value.princOkList depth vs
+  | .clos _ body   => Expr.princOk depth body
+  | .errV          => true
+termination_by v => sizeOf v
+
+def Value.princOkList (depth : Nat) : List Value → Bool
+  | List.nil       => true
+  | List.cons v vs => Value.princOk depth v && Value.princOkList depth vs
+termination_by l => sizeOf l
+
+def Value.princOkRec (depth : Nat) : List (String × Value) → Bool
+  | List.nil            => true
+  | List.cons (_, v) xs => Value.princOk depth v && Value.princOkRec depth xs
+termination_by l => sizeOf l
+
+/-- Principal-scope well-formedness for expressions. `letPrinc` grows
+    `depth` by 1 for the body; Expr-level binders (`letE`, `forE`,
+    `varDecl`) leave it unchanged; `gen`/`agent` check their PrincRef. -/
+def Expr.princOk (depth : Nat) : Expr → Bool
+  | .val v             => Value.princOk depth v
+  | .var _             => true
+  | .letE _ e1 e2      => Expr.princOk depth e1 && Expr.princOk depth e2
+  | .ifE e1 e2 e3      =>
+      Expr.princOk depth e1 && Expr.princOk depth e2 && Expr.princOk depth e3
+  | .whileE e1 e2      => Expr.princOk depth e1 && Expr.princOk depth e2
+  | .forE e1 e2        => Expr.princOk depth e1 && Expr.princOk depth e2
+  | .seq e1 e2         => Expr.princOk depth e1 && Expr.princOk depth e2
+  | .ask _             => true
+  | .say _             => true
+  | .letPrinc b body   =>
+      PrincBinder.princOk depth b && Expr.princOk (depth + 1) body
+  | .gen _ _ pr        => pr.princOk depth
+  | .agent _ pr        => pr.princOk depth
+  | .evalE f args      => Expr.princOk depth f && Expr.princOkList depth args
+  | .enforce e         => Expr.princOk depth e
+  | .js _              => true
+  | .varDecl _ _ e1 e2 => Expr.princOk depth e1 && Expr.princOk depth e2
+  | .assign _ e        => Expr.princOk depth e
+  | .varRead _         => true
+  | .proj e _          => Expr.princOk depth e
+termination_by e => sizeOf e
+
+def Expr.princOkList (depth : Nat) : List Expr → Bool
+  | List.nil       => true
+  | List.cons e es => Expr.princOk depth e && Expr.princOkList depth es
+termination_by l => sizeOf l
+
+end
+
+/-! ### `Expr.princOk` evaluation lemmas.
+    Leaf simp lemmas to discharge well-scoping obligations on closed
+    atomic forms without unfolding through the recursive def. -/
+
+@[simp] theorem Expr.princOk_var (depth : Nat) (n : Nat) :
+    Expr.princOk depth (.var n) = true := by unfold Expr.princOk; rfl
+
+@[simp] theorem Expr.princOk_ask (depth : Nat) (s : String) :
+    Expr.princOk depth (.ask s) = true := by unfold Expr.princOk; rfl
+
+@[simp] theorem Expr.princOk_say (depth : Nat) (s : String) :
+    Expr.princOk depth (.say s) = true := by unfold Expr.princOk; rfl
+
+@[simp] theorem Expr.princOk_js (depth : Nat) (j : JsExpr) :
+    Expr.princOk depth (.js j) = true := by unfold Expr.princOk; rfl
+
+@[simp] theorem Expr.princOk_varRead (depth : Nat) (x : String) :
+    Expr.princOk depth (.varRead x) = true := by unfold Expr.princOk; rfl
 
 abbrev ErrCtx := List Event
 

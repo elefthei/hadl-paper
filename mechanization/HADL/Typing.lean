@@ -29,6 +29,7 @@ inductive RtType : Value → Ty → Prop where
   | vStr  {s}: RtType (.strV  s) .tString
   | vSchema {τ} : RtType (.schemaV τ) .tSchema
   | vPol    {p} : RtType (.polV p) .tPolicy
+  | vPrinc  {pr} : RtType (.principalV pr) .tPrincipal
   /-- A closure of arity n has an arrow type. We black-box the body's
       type check here; soundness only needs the outer shape. -/
   | vClos {n body args ret} :
@@ -109,6 +110,7 @@ def Ty.healable : Ty → Bool
   | .tBool        => false
   | .tNumber      => false
   | .tString      => false
+  | .tPrincipal   => false
 termination_by τ => sizeOf τ
 
 def Ty.recordHealable : List (String × Ty) → Bool
@@ -150,6 +152,8 @@ end
 @[simp] theorem Ty.healable_tNumber : Ty.healable .tNumber = false := by
   unfold Ty.healable; rfl
 @[simp] theorem Ty.healable_tString : Ty.healable .tString = false := by
+  unfold Ty.healable; rfl
+@[simp] theorem Ty.healable_tPrincipal : Ty.healable .tPrincipal = false := by
   unfold Ty.healable; rfl
 
 /-- Static typeability of expressions under a single-variable context.
@@ -212,6 +216,28 @@ inductive StType : Expr → Ty → Prop where
       StType e1 τ → StType e2 τ2 → StType (.varDecl x τ e1 e2) τ2
   | assign {x e τ} : StType e τ → StType (.assign x e) .tUnit
   | varRead {x τ} : StType (.varRead x) τ
+  /-- Principal binder typing (Phase N). The body is typed in an
+      entity store extended by one. The black-boxed paper checker
+      additionally enforces `b.princOk depth`, which we expose as an
+      explicit premise. -/
+  | letPrinc {b body τ}
+      (_hb : ∀ depth, PrincBinder.princOk depth b = true)
+      (_hbody : StType body τ) :
+      StType (.letPrinc b body) τ
+  /-- `gen` and `agent` carry a `PrincRef`; well-typed at depth 0
+      requires the ref to be in scope. The static checker's depth
+      tracking is hidden; we encode it by demanding `princOk` at
+      every depth (i.e. at depth 0). -/
+  | gen {τ s pr}
+      (_hpr : pr.princOk 0 = true) :
+      StType (.gen τ s pr) τ
+  | agent {s pr}
+      (_hpr : pr.princOk 0 = true) :
+      StType (.agent s pr) .tString
+  -- `restrict` itself is not an Expr — it is a `PrincBinder` —
+  -- so `letPrinc (.restrict pr)` is the only surface form. The
+  -- `letPrinc` rule above subsumes both `root` and `restrict pr`
+  -- via its `PrincBinder.princOk` premise.
 
 /-- Store well-formedness: every cell's value has its declared type. -/
 def Store.WF (σ : Store) : Prop :=

@@ -14,6 +14,7 @@ import HADL.Oracle
 import HADL.JsAxioms
 import HADL.Config
 import HADL.Reduction
+import HADL.Scope
 import HADL.Soundness
 import HADL.Safety
 import HADL.AxiomCheck

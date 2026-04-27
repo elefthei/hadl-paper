@@ -78,6 +78,7 @@ private theorem value_typeable : ∀ v : Value, v ≠ .errV → ∃ τ, RtType v
   | .strV  _, _  => ⟨_, .vStr⟩
   | .schemaV _, _ => ⟨_, .vSchema⟩
   | .polV _, _   => ⟨_, .vPol⟩
+  | .principalV _, _ => ⟨_, .vPrinc⟩
   | .clos n _body, _ =>
       ⟨.tArrow (List.replicate n .tUnit) .tUnit,
        .vClos (args := List.replicate n .tUnit) (ret := .tUnit)
