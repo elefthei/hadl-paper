@@ -36,6 +36,9 @@ T4_progress_gen                 : [propext, Classical.choice, Quot.sound]
 T4_progress_agent               : [propext, Classical.choice, Quot.sound]
 nested_array_of_schema_succeeds : [propext, Classical.choice, Quot.sound]
 policyInstall_shrinks           : [propext, Classical.choice, Quot.sound]
+Step.preserves_princOk          : [propext, Classical.choice, Quot.sound]
+Steps.preserves_princOk         : [propext, Classical.choice, Quot.sound]
+principal_indices_bounded       : [propext, Classical.choice, Quot.sound]
 ```
 
 No user-introduced axioms. `policyInstall_shrinks` is proved by iterating

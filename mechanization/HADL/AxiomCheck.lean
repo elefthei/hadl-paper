@@ -5,6 +5,7 @@
 
 import HADL.Soundness
 import HADL.Safety
+import HADL.Scope
 import HADL.Examples
 
 namespace HADL
@@ -96,5 +97,17 @@ namespace HADL
 /-- info: 'HADL.policyInstall_shrinks' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (info) in
 #print axioms policyInstall_shrinks
+
+/-- info: 'HADL.Step.preserves_princOk' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms Step.preserves_princOk
+
+/-- info: 'HADL.Steps.preserves_princOk' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms Steps.preserves_princOk
+
+/-- info: 'HADL.principal_indices_bounded' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms principal_indices_bounded
 
 end HADL
