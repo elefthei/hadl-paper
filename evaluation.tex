@@ -98,13 +98,4 @@ The \hadl program that achieves the same guarantees is 14 lines while the assert
 \subsection{Threats to Validity}
 \label{sec:eval-threats}
 
-This is a focused case study, not a broad benchmark.
-It uses one workflow and one model family.
-The schema-healing mechanism triggered on every run. The bare clinical schema prompt
-consistently omitted \texttt{cost}, and \hadl repaired it automatically on the first retry.
-Whether a given LLM or prompt reliably omits a field depends on context. The point is not that
-the LLM always omits \texttt{cost}, but that \hadl \emph{structurally guarantees} detection and
-repair when it does, whereas plain baselines silently crash.
-The authorization comparison is partly qualitative: the assertion baselines \emph{can} be made
-correct by careful manual checks, but doing so adds 114--140 lines, doubles the runtime, and
-depends on the developer not omitting any check.
+This is a focused case study, not a broad benchmark: one workflow, one model family. Schema-healing triggered on every run --- the bare clinical prompt consistently omitted \texttt{cost} and \hadl{} repaired it on first retry --- but reliability depends on context; the structural guarantee, not LLM behavior, is the claim. The authorization comparison is partly qualitative: assertion baselines \emph{can} be made correct manually, at the cost of 114--140 added lines, doubled runtime, and reliance on developer diligence.

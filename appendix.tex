@@ -12,6 +12,19 @@
 \section{Type-System Limitations}
 \label{app:limitations}
 
+\subsection{Gradual-validation details}
+\label{app:gradual-detail}
+
+\paragraph{Schema-to-type mapping.} When a \texttt{Schema} value materializes, the interpreter applies a mapping $\sigma$ that sends \texttt{null} to \texttt{()}, \texttt{boolean} to \texttt{Bool}, \texttt{integer}/\texttt{number} to \texttt{Number}, \texttt{string}/\texttt{enum} to \texttt{String}, and compound schemas (\texttt{array}/\texttt{object}/\texttt{\$ref}) back to \texttt{Schema}, then registers the result in the type environment so a \texttt{Schema}-typed variable may appear in annotation position (e.g.\ \texttt{let booking: form\_schema = gen "..."}).
+
+\paragraph{Re-checking discipline.} Re-checking after materialization verifies downstream bindings against the resolved type. If a downstream field access or annotation fails to type-check and \texttt{@retries} is active, the runtime re-invokes the causal \texttt{gen} call with the type error as feedback. The same loop applies to workflow and policy generation: a continuation that fails to type-check, an \texttt{eval} site whose argument types disagree with the materialized arrow, or a Cedar parse failure each appends a feedback event and re-invokes the causal \texttt{gen}.
+
+\paragraph{Workflow generation.} The entire \hadl{} AST is serializable, so an arrow-typed \texttt{gen} produces a JSON-serialized \texttt{Program}. \texttt{eval} deserializes, validates argument and return types against the workflow type, and executes the result with closure-like semantics in the caller's environment.
+
+\paragraph{Policy generation.} A \texttt{Policy}-annotated binding stores the policy without activating it; the explicit \texttt{enforce} expression installs it, and because \texttt{enforce} is an ordinary expression it can appear inside conditional branches (enabling human-in-the-loop approval).
+
+\subsection{Restrictions of the type system}
+
 The type system deliberately makes several simplifications to keep gradual validation tractable.
 
 \begin{itemize}
@@ -283,6 +296,15 @@ $\rulename{VarDecl-Bind}$ and $\rulename{Assign-Write}$ carry the runtime-type s
 
 \section{Proofs of Theorems~\ref{thm:hadl-soundness} and \ref{thm:hadl-progress}}
 \label{app:proofs}
+\label{app:soundness}
+
+\paragraph{T2 sink exclusion.} T2 is conditional on $v \neq \errV$ because $\errV$ is the fail-closed sink produced by $\rulename{Let-Gen-TypeError}$ and $\rulename{Let-Gen-BudgetError}$ and has no runtime type by design. For non-sink values T2 forces the mechanization to assign runtime types to closures, records, and arrays via dedicated $\mathtt{vClos}/\mathtt{vRec}/\mathtt{vArr}$ constructors that black-box structural content; the $\RtType{v}{\Tschema}$ premise of $\rulename{Let-Gen-Success-Schema}$ still witnesses the annotated type at oracle materialization.
+
+\paragraph{T4a strengthening.} T4a is now \emph{stronger} than ``budget-exhausted gen is stuck'': because $\Gen{\tau}{s}{\MPrin}$ is no longer a standalone redex, no rule fires from such an expression at any heal context (regardless of budget). Materialization happens only inside a $\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}$, where $\rulename{Let-Gen-BudgetError}$ converts an over-budget heal context to the fail-closed sink $\errV$ uniformly across all $\tau$. T4b/T4c cover Schema, arrow, and Policy types; the analogous $\mathtt{T4\_truthful\_success\_arrow}$ and $\mathtt{T4\_progress\_gen\_policy}$ are mechanized in \texttt{Safety.lean} as 1-line corollaries of the parametric $\mathtt{T4\_truthful\_success\_gen\_healable}$ / $\mathtt{T4\_progress\_gen\_healable}$.
+
+\paragraph{Termination sketch (paper-only).} Termination (Theorem~\ref{thm:hadl-term}) is argued on paper: between oracle firings only pure-core rules fire, which terminate under the loop assumption; at each oracle firing either $\MErr$ is flushed to $\emptyset$ (success) or an $\ErrEv{\cdot}$ extends it by one (heal), bounding heals by $\MRetry$ per site. $\rulename{Let-Gen-BudgetError}$ terminates the run at the first over-budget configuration by stepping to $\errV$; $\rulename{Let-Gen-TypeError}$ does the same at non-healable $\tau$. At a healable $\tau$ an ill-typed oracle response has no transition --- the trace is stuck, and Progress (T4c) rules this out under eventually-truthful $\mathcal{O}$.
+
+\paragraph{Scope of the formal results.} T1--T4c are mechanized in Lean~4 (\texttt{mechanization/HADL/}), sorry-free and depending only on the standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$; a build-time guard (\texttt{AxiomCheck.lean}) breaks the build on any further axiom. The trace-level termination argument is prose-only (its per-step ingredients are mechanized). The eventually-truthful oracle is an assumption about LLM behaviour the runtime cannot verify; progress conclusions are conditional on it, and absent it a configuration may be stuck at an oracle redex whose budget is exhausted --- by design, \hadl fails closed by absence of transition. Static type checking is black-boxed (only reflexivity cases appear in proofs); the Rust type checker is not part of the Lean artifact. The threat-model gaps of \sect{sec:design-threat} --- prompt injection, semantic policy misalignment, \texttt{say}-based exfiltration, and \texttt{js} side effects --- are outside the scope of soundness. Practical claims beyond staged type safety and policy monotonicity per step are the subject of \sect{sec:evaluation}.
 
 Each proof is an induction on the derivation of $C \step C'$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization is free of user-introduced axioms: $\mathtt{policyInstall\_shrinks}$ is proved by iterated application of Cedar-Lean's $\mathtt{unchanged\_deny\_when\_add\_forbid}$ theorem, and the JavaScript host evaluator is modelled by an opaque $\mathtt{jsEval} : \mathtt{JsExpr} \to \mathsf{Option}\;\mathtt{Value}$ whose stub implementation returns $\mathsf{none}$; consequently the Lean $\mathtt{jsEval\_wellTyped}$ lemma is vacuous, and the paper-level ``oracular \texttt{js}'' story is not yet axiomatized --- a faithful axiomatization would replace the stub with a single $\mathtt{js\_oracular}$ axiom and add it to the allowlist checked by $\mathtt{AxiomCheck.lean}$. The policy-install operation $\Install{\cdot}{\cdot}$ is \emph{partial} (Lean's $\mathtt{policyInstall}$ returns $\mathsf{Option}$); the paper's $\MPol' = \Install{\MPol}{p}$ notation is shorthand for ``on the branch where installation succeeds''. All theorems depend only on Lean's standard meta-axioms ($\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$); no other steps are admitted.
 
