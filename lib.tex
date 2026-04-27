@@ -1,6 +1,6 @@
 %%%%%%%%%%%%% Packages
 \usepackage[utf8]{inputenc}
-\usepackage{xcolor}
+\usepackage[dvipsnames]{xcolor}
 \usepackage{mathpartir}
 \usepackage{tikz}
 \usepackage{hyperref}
@@ -19,6 +19,54 @@
 %%%%%%%%%%%%%% Comments
 \usepackage[]{comments} % add option 'hide' to hide all
 \Commenter{lef}
+
+%%%%%%%%%%%%% Listings setup for HADL code examples
+% Three keyword classes:
+%   [1] top-level constructs (workflow)         — black bold
+%   [2] expression-level keywords               — dark green bold
+%   [3] types / built-in schema names           — dark red bold
+\lstdefinelanguage{hadl}{
+  sensitive=true,
+  alsoletter={0123456789},
+  % Top-level (class 1): black bold
+  morekeywords=[1]{workflow},
+  keywordstyle=[1]\bfseries\color{black},
+  % Expressions (class 2): dark green bold
+  morekeywords=[2]{let, var, restrict, gen, agent, ask, say, if, else, while, for, in, type, enforce, eval, as, js},
+  keywordstyle=[2]\bfseries\color{green!50!black},
+  % Types (class 3): dark red bold
+  morekeywords=[3]{root, Array, String, Number, Bool, Schema, Policy},
+  keywordstyle=[3]\bfseries\color{red!50!black},
+  comment=[l]{//},
+  morestring=[b]",
+  stringstyle=\itshape\color{gray},
+  breaklines=true,
+  deletestring=[b]",
+  deletestring=[b]',
+  moredelim=[s][\color{gray}]{"}{"},
+  moredelim=*[is][\color{black!85}\ttfamily\itshape]{`}{`},
+  xleftmargin=\parindent,
+  showstringspaces=false,
+  basicstyle=\small\ttfamily,
+  commentstyle=\itshape\color{red!40!black},
+  identifierstyle=\itshape,
+  escapeinside={<@}{@>}
+}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  xleftmargin=2em,
+  frame=single,
+  framesep=3pt,
+  aboveskip=1em,
+  belowskip=1em,
+  escapeinside={(*@}{@*)},
+}
 
 %%%%%%%%%%%%% Reference macros
 \newcommand{\sect}[1]{Section~\ref{#1}\xspace}
@@ -63,6 +111,8 @@
 \newcommand{\Tbool}{\texttt{Bool}}
 \newcommand{\Tschema}{\texttt{Schema}}
 \newcommand{\Tpolicy}{\texttt{Policy}}
+\newcommand{\Tprincipal}{\texttt{Principal}}
+\newcommand{\Tpath}{\texttt{Path}}
 \newcommand{\Tarrow}[2]{(#1 \to #2)}
 \newcommand{\Trec}[1]{\{\,#1\,\}}
 \newcommand{\Tarr}[1]{\texttt{array}[#1]}
@@ -88,6 +138,13 @@
 \newcommand{\Clos}[2]{\lambda^{#1}.\,#2}
 \newcommand{\Enforce}[1]{\texttt{enforce}\;#1}
 \newcommand{\Js}[1]{\texttt{js}\;#1}
+% Principal introducers. `\Eroot` is the universal principal; `\Erestrict{e}`
+% creates a fresh strictly weaker principal from an existing one.
+\newcommand{\Eroot}{\texttt{root}}
+\newcommand{\Erestrict}[1]{\texttt{restrict}\;#1}
+% Principal value: a path in the restriction hierarchy rooted at `root`. `p`
+% ranges over Principal values; we elide the underlying tag-chain encoding.
+\newcommand{\Vprincipal}[1]{\langle\!\langle #1 \rangle\!\rangle}
 % De-Bruijn let: body has one binder. Rendered with a placeholder name `x` to
 % match fig:syntax's `let x : T = e in e'` form; the bound occurrence is
 % index 0 in the body.

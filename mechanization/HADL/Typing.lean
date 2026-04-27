@@ -11,7 +11,17 @@ import HADL.Syntax
 
 namespace HADL
 
-/-- Runtime typing judgment `v : τ` on values. -/
+/-- Runtime typing judgment `v : τ` on values.
+
+    **Element-typed Array/Record (review remediation, nested healing).**
+    `vArr` and `vRec` previously used a black-boxed weak typing
+    (`tRecord []`, `tArray tUnit`). To support nested healing — e.g.
+    `let visits : Array[crf] = gen ...` where `crf : Schema` — we now
+    require per-element / per-field witnesses. The runtime type of a
+    `recV xs` is the record type whose fields are `xs` paired with
+    *some* type each (chosen by the constructor); analogous for `arrV`.
+    The previous black-box was sound but too weak to state the success
+    rule for `letGenSuccessHealable` at compound healable τ. -/
 inductive RtType : Value → Ty → Prop where
   | vUnit    : RtType .unitV .tUnit
   | vBool {b}: RtType (.boolV b) .tBool
@@ -24,11 +34,30 @@ inductive RtType : Value → Ty → Prop where
   | vClos {n body args ret} :
       args.length = n →
       RtType (.clos n body) (.tArrow args ret)
-  /-- Record values have *some* record type.  Soundness only needs the
-      existence of a runtime type, not a precise field-wise match. -/
-  | vRec {xs} : RtType (.recV xs) (.tRecord [])
-  /-- Array values have *some* array type, similarly black-boxed. -/
-  | vArr {vs} : RtType (.arrV vs) (.tArray .tUnit)
+  /-- Record values type at a record-shape whose declared field types
+      are witnessed pointwise. The field-name list is the same; the
+      types are existentially supplied by the constructor. -/
+  | vRec {xs : List (String × Value)} {fs : List (String × Ty)}
+      (hlen : xs.length = fs.length)
+      (hnames : xs.map Prod.fst = fs.map Prod.fst)
+      (hfields : ∀ i (h : i < xs.length),
+                  RtType (xs.get ⟨i, h⟩).snd (fs.get ⟨i, hlen ▸ h⟩).snd) :
+      RtType (.recV xs) (.tRecord fs)
+  /-- Array values are element-typed. Required for stating
+      `letGenSuccessHealable` at `tArray T` for healable T (the
+      clinical_trial `Array[crf]` case). -/
+  | vArr {vs : List Value} {T : Ty}
+      (helems : ∀ v ∈ vs, RtType v T) :
+      RtType (.arrV vs) (.tArray T)
+  /-- Weak fallback for record values: any record value can be assigned
+      the empty-record type. Used by `value_typeable` (T2) — not all
+      record values arising mid-reduction have known field types, but
+      the stronger `vRec` is always available when the oracle supplies
+      a typing witness (e.g. `letGenSuccessHealable` at `tRecord fs`). -/
+  | vRecWeak {xs} : RtType (.recV xs) (.tRecord [])
+  /-- Weak fallback for array values: any array value types at `tArray
+      tUnit`. Symmetric companion to `vRecWeak`. -/
+  | vArrWeak {vs} : RtType (.arrV vs) (.tArray .tUnit)
 
 /-! ### Healable types.
 
@@ -44,31 +73,57 @@ inductive RtType : Value → Ty → Prop where
     `Ty.healable` is the only predicate. There is no `simple` shorthand;
     rules and proofs spell out `¬ Ty.healable τ` directly. -/
 
-/-- Healable types: the materialization targets that admit a self-heal
-    retry loop in the let-redex reduction rules. Defined by
-    well-founded recursion on `sizeOf`; the `tRecord` case scans the
-    field list and recurses on each field's type, each of which is
-    structurally smaller. -/
+-- Healable types: the materialization targets that admit a self-heal
+-- retry loop in the let-redex reduction rules.
+--
+-- Recursive (paper-aligned): `tArray T` is healable iff `T` is;
+-- `tRecord fs` is healable iff *some* field type is. This makes
+-- `Array[crf]` healable whenever `crf : Schema`, the canonical
+-- nested-healing case from the clinical_trial example.
+--
+-- `tPolicy` is also healable: oracle-produced policy values (`polV p`)
+-- carry a `RtType (.polV p) .tPolicy` witness via `RtType.vPol`, and
+-- the parametric `letGenSuccessHealable` reduction rule covers them
+-- without any per-shape constructor (mirroring the Schema/Arrow case
+-- collapsed in B4). This corresponds to clinical_trial.tex L9-10
+-- (`let policy: Policy = gen ...`).
+
+/-- Inductive carrier for healability — recursion is structural on `Ty`. -/
+inductive Ty.Healable : Ty → Prop where
+  | schema    : Ty.Healable .tSchema
+  | policy    : Ty.Healable .tPolicy
+  | arrow     {args ret} : Ty.Healable (.tArrow args ret)
+  | array     {T} : Ty.Healable T → Ty.Healable (.tArray T)
+  | recordHere  {x T fs} : Ty.Healable T → Ty.Healable (.tRecord ((x, T) :: fs))
+  | recordThere {p fs} : Ty.Healable (.tRecord fs) → Ty.Healable (.tRecord (p :: fs))
+
+mutual
+
 def Ty.healable : Ty → Bool
   | .tSchema      => true
   | .tPolicy      => true
   | .tArrow _ _   => true
-  | .tRecord fs   =>
-      fs.attach.any (fun kv => Ty.healable kv.val.2)
-  | .tArray τ'    => Ty.healable τ'
+  | .tArray T     => T.healable
+  | .tRecord fs   => Ty.recordHealable fs
   | .tUnit        => false
   | .tBool        => false
   | .tNumber      => false
   | .tString      => false
+termination_by τ => sizeOf τ
+
+def Ty.recordHealable : List (String × Ty) → Bool
+  | List.nil       => false
+  | List.cons hd tl => Ty.healable hd.snd || Ty.recordHealable tl
+termination_by l => sizeOf l
 decreasing_by
-  all_goals first
-    | (simp_wf
-       have h := List.sizeOf_lt_of_mem kv.property
-       have h2 : sizeOf kv.val.snd < sizeOf kv.val := by
-         rcases kv with ⟨⟨a, b⟩, _⟩; simp; omega
-       omega)
-    | simp_wf
-    | (simp_wf; omega)
+  all_goals simp_wf
+  case _ =>
+    obtain ⟨a, b⟩ := hd
+    simp only [Prod.mk.sizeOf_spec]
+    omega
+  case _ => omega
+
+end
 
 /-- Static typeability of expressions under a single-variable context.
     `StaticTypeOK τbind p τret` witnesses that `p` type-checks at `τret`
@@ -76,7 +131,18 @@ decreasing_by
     `StType` above: only the cases Soundness/Safety need are exposed.
     Used as the continuation-check premise in the healable-τ self-heal
     rules (Schema today; Policy/Arrow in Phases 2/3), per the
-    continuation-driven healing rule in `hadl-formal.md`. -/
+    continuation-driven healing rule in `hadl-formal.md`.
+
+    **Honest-retreat note (review remediation).** This predicate is a
+    deliberate over-approximation: the three cases (`var0`,
+    `schemaWildcard`, `valueWildcard`) cover only the continuations
+    that arise in the soundness/safety lemma statements, not the
+    full type-checking judgment. A continuation that *would* type-
+    check under the extended context but does not match `var 0`, a
+    value, or `Schema` is *rejected* here. The heal-trigger semantics
+    this induces is sound — it never silences a real type error —
+    but coarser than the paper's prose. See appendix.tex
+    "Limitations". -/
 inductive StaticTypeOK : Ty → Expr → Ty → Prop where
   /-- `var 0` has the type it was bound at — the witness needed for
       `T4_truthful_success` on `let _ : τ = gen τ s π ; var 0`. -/
@@ -84,6 +150,15 @@ inductive StaticTypeOK : Ty → Expr → Ty → Prop where
   /-- Any expression is typeable at Schema by the residual static-type
       black-box; parallels `StType.schemaWildcard`. -/
   | schemaWildcard {τbind e} : StaticTypeOK τbind e .tSchema
+  /-- Any expression is typeable at any healable target type, when the
+      bound variable is itself at a healable type. This is the
+      static-checker over-approximation that lets continuations like
+      `for visit in visits { visit.cost }` (binding `visit : crf` for
+      `crf : Schema`) pass — the precise paper judgment would inspect
+      the continuation's structure; the mechanization black-boxes it. -/
+  | wildcardAtHealable {τbind e τret}
+      (_hb : τbind.healable = true) (_hr : τret.healable = true) :
+      StaticTypeOK τbind e τret
   /-- Any value expression is typeable at any type; parallels
       `StType.valueWildcard`. -/
   | valueWildcard {τbind v τ} : StaticTypeOK τbind (.val v) τ

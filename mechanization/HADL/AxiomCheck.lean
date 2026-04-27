@@ -6,6 +6,7 @@
 import HADL.Soundness
 import HADL.Safety
 import HADL.Safety2
+import HADL.Examples
 
 namespace HADL
 
@@ -44,5 +45,65 @@ namespace HADL
 /-- info: 'HADL.T4_progress_agent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (info) in
 #print axioms T4_progress_agent
+
+/-- info: 'HADL.T4_truthful_success_arrow' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_truthful_success_arrow
+
+/-- info: 'HADL.T4_progress_gen_arrow' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_progress_gen_arrow
+
+/-- info: 'HADL.T4_truthful_success_healable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_truthful_success_healable
+
+/-- info: 'HADL.nested_array_of_schema_succeeds' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms nested_array_of_schema_succeeds
+
+/-- info: 'HADL.T4_truthful_success_gen_healable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_truthful_success_gen_healable
+
+/-- info: 'HADL.T4_progress_gen_healable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_progress_gen_healable
+
+/-- info: 'HADL.T4_progress_gen_nested_array_of_schema' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_progress_gen_nested_array_of_schema
+
+/-- info: 'HADL.T4_progress_gen_policy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms T4_progress_gen_policy
+
+/-- info: 'HADL.ClinicalTrial.clinical_trial_progresses' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms ClinicalTrial.clinical_trial_progresses
+
+/-- info: 'HADL.ClinicalTrial.clinicalTrialPrefix_steps' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms ClinicalTrial.clinicalTrialPrefix_steps
+
+/-- info: 'HADL.ClinicalTrial.L17_visitCost_with_missing_field_heals' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms ClinicalTrial.L17_visitCost_with_missing_field_heals
+
+/-- info: 'HADL.ClinicalTrial.L18_patientId_self_heal' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms ClinicalTrial.L18_patientId_self_heal
+
+/-- info: 'HADL.ClinicalTrial.L17_heal_then_succeed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms ClinicalTrial.L17_heal_then_succeed
+
+/-- info: 'HADL.clinical_trial_visit_cost_projects' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms clinical_trial_visit_cost_projects
+
+/-- info: 'HADL.policyInstall_shrinks' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (info) in
+#print axioms policyInstall_shrinks
 
 end HADL

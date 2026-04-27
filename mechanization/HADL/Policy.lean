@@ -29,7 +29,7 @@ opaque parsePolicies : String → Option Cedar.Spec.Policies
 /-- Ambient request for authorization questions: a principal/action pair is
     encoded as a Cedar request over the stub `Principal`/`Action` entity types. -/
 def requestOf (π : Principal) (a : Action) : Cedar.Spec.Request :=
-  { principal := { ty := { id := "Principal", path := [] }, eid := π }
+  { principal := { ty := { id := "Principal", path := [] }, eid := π.toString }
   , action    := { ty := { id := "Action",    path := [] },
                    eid := match a with
                           | .gen   => "gen"

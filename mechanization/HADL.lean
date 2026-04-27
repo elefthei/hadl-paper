@@ -14,8 +14,8 @@ import HADL.Oracle
 import HADL.JsAxioms
 import HADL.Config
 import HADL.Reduction
-import HADL.Lemmas
 import HADL.Soundness
 import HADL.Safety
 import HADL.Safety2
 import HADL.AxiomCheck
+import HADL.Examples

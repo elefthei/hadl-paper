@@ -15,7 +15,57 @@ open LeanSubst
 
 namespace HADL
 
-abbrev Principal := String
+/-- A principal: a meta-level newtype around a `Nat` tag. This struct
+    is **not** an `Expr`-level value (there is no `Value.principalV`);
+    it is used only by `Step` rules' existential principals and by
+    Cedar's request encoding. The actual principal in scope at a `gen`
+    site is determined by the typing derivation's entity store `E`,
+    not by any AST node. -/
+@[ext] structure Principal where
+  id : Nat
+deriving DecidableEq, Inhabited, Repr
+
+/-- The unrestricted built-in principal. -/
+def Principal.root : Principal := ⟨0⟩
+
+/-- Create a fresh principal from a tag. -/
+def Principal.restrict (tag : Nat) : Principal := ⟨tag⟩
+
+/-- String encoding for Cedar entity ids. -/
+def Principal.toString (p : Principal) : String := ToString.toString p.id
+
+/-- Syntactic principal slot for `gen`/`agent`. A `PrincRef` is a de
+    Bruijn index into the **entity store `E`** (a separate scope from
+    regular Expr identifiers). By convention, `bvar 0` in the empty
+    program refers to `root`; each `letPrinc b body` introduces a new
+    principal at index 0 of the body's entity scope, shifting existing
+    principals up by one. -/
+inductive PrincRef where
+  /-- De Bruijn reference into the entity store `E`. -/
+  | bvar : Nat → PrincRef
+  deriving Inhabited, Repr
+
+/-- Renaming on `PrincRef`. Principals live in their own de Bruijn
+    scope, independent of the regular Expr identifier scope, so
+    `Expr` renamings do **not** touch PrincRef indices. -/
+def PrincRef.rmap (_ : Ren) : PrincRef → PrincRef
+  | .bvar n => .bvar n
+
+/-- Right-hand side of a principal binder `letPrinc`. Introduces either
+    the built-in `root` principal (only legal at the top of a program;
+    typing rejects nested `letPrinc root` against a non-empty E) or a
+    fresh restriction `p <: parent`. -/
+inductive PrincBinder where
+  | root     : PrincBinder
+  | restrict : PrincRef → PrincBinder
+  deriving Inhabited, Repr
+
+/-- Renaming on a principal binder: only the parent PrincRef may
+    contain a bvar, but PrincRef.rmap is the identity under regular
+    Expr renaming, so this is the identity too. -/
+def PrincBinder.rmap (_ : Ren) : PrincBinder → PrincBinder
+  | .root        => .root
+  | .restrict pr => .restrict pr
 
 /-- Types. No `tVar`: Schema materialization is handled at runtime
     via the oracle's truthfulness + `RtType`. -/
@@ -95,10 +145,20 @@ inductive Expr where
   | ask     : String → Expr
   /-- Oracle `say`. -/
   | say     : String → Expr
-  /-- Oracle `gen` action. -/
-  | gen     : Ty → String → Principal → Expr
-  /-- Oracle `agent` action. -/
-  | agent   : String → Principal → Expr
+  /-- Principal binder `let p : Principal = b ; body`. The binder `b`
+      is either `root` (introducing the built-in principal) or
+      `restrict pr` (introducing a sub-principal of `pr`). The body is
+      evaluated in an entity store extended with `b` at index 0. This
+      is **not** a `letE` form because principals are not Expr-level
+      values; they exist only in the entity store `E`, which is
+      threaded through typing derivations. -/
+  | letPrinc : PrincBinder → Expr → Expr
+  /-- Oracle `gen` action. The third argument is a `PrincRef` (a de
+      Bruijn index into the entity store `E`): `bvar 0` is the most
+      recent binder, `bvar 1` is the next, and so on. -/
+  | gen     : Ty → String → PrincRef → Expr
+  /-- Oracle `agent` action. The principal slot is a `PrincRef`. -/
+  | agent   : String → PrincRef → Expr
   /-- Closure application. -/
   | evalE   : Expr → List Expr → Expr
   /-- Policy installation (`e` evaluates to a `polV`). -/
@@ -111,6 +171,11 @@ inductive Expr where
   | assign  : String → Expr → Expr
   /-- Mutable-variable read. -/
   | varRead : String → Expr
+  /-- Record field projection (`e.f`). The paper's self-heal trigger
+      (clinical_trial L17 `visit.cost`, L18 `visit.patient_id`):
+      stuck when the field is absent — that stuck state is the
+      runtime-error condition the paper retreats from. -/
+  | proj    : Expr → String → Expr
 end
 
 /-- Value predicate for expressions: `true` iff the expression is a
@@ -192,14 +257,16 @@ def Expr.rmap (r : Ren) : Expr → Expr
   | .seq e1 e2         => .seq (Expr.rmap r e1) (Expr.rmap r e2)
   | .ask s             => .ask s
   | .say s             => .say s
-  | .gen τ s π         => .gen τ s π
-  | .agent s π         => .agent s π
+  | .letPrinc b body   => .letPrinc (PrincBinder.rmap r b) (Expr.rmap r body)
+  | .gen τ s pr        => .gen τ s (PrincRef.rmap r pr)
+  | .agent s pr        => .agent s (PrincRef.rmap r pr)
   | .evalE f args      => .evalE (Expr.rmap r f) (Expr.rmapList r args)
   | .enforce e         => .enforce (Expr.rmap r e)
   | .js je             => .js je
   | .varDecl x τ e1 e2 => .varDecl x τ (Expr.rmap r e1) (Expr.rmap r e2)
   | .assign x e        => .assign x (Expr.rmap r e)
   | .varRead x         => .varRead x
+  | .proj e f          => .proj (Expr.rmap r e) f
 
 def Expr.rmapList (r : Ren) : List Expr → List Expr
   | List.nil       => List.nil
@@ -214,6 +281,18 @@ instance : RenMap Expr where
 def Subst.liftN (σ : Subst Expr) : Nat → Subst Expr
   | 0     => σ
   | n + 1 => (Subst.liftN σ n).lift
+
+/-- Substitution on `PrincRef`. Principals live in their own de Bruijn
+    scope independent of the regular Expr scope, so an Expr `Subst`
+    does **not** affect PrincRef indices. -/
+def PrincRef.smap (_ : Subst Expr) : PrincRef → PrincRef
+  | .bvar n => .bvar n
+
+/-- Substitution on a `PrincBinder`: identity, since the parent
+    `PrincRef` lives in the entity scope (not the Expr scope). -/
+def PrincBinder.smap (_ : Subst Expr) : PrincBinder → PrincBinder
+  | .root        => .root
+  | .restrict pr => .restrict pr
 
 /-! ### Substitution on `Value` and `Expr`.
 
@@ -255,14 +334,16 @@ def Expr.smap (σ : Subst Expr) : Expr → Expr
   | .seq e1 e2         => .seq (Expr.smap σ e1) (Expr.smap σ e2)
   | .ask s             => .ask s
   | .say s             => .say s
-  | .gen τ s π         => .gen τ s π
-  | .agent s π         => .agent s π
+  | .letPrinc b body   => .letPrinc (PrincBinder.smap σ b) (Expr.smap σ body)
+  | .gen τ s pr        => .gen τ s (PrincRef.smap σ pr)
+  | .agent s pr        => .agent s (PrincRef.smap σ pr)
   | .evalE f args      => .evalE (Expr.smap σ f) (Expr.smapList σ args)
   | .enforce e         => .enforce (Expr.smap σ e)
   | .js je             => .js je
   | .varDecl x τ e1 e2 => .varDecl x τ (Expr.smap σ e1) (Expr.smap σ e2)
   | .assign x e        => .assign x (Expr.smap σ e)
   | .varRead x         => .varRead x
+  | .proj e f          => .proj (Expr.smap σ e) f
 
 def Expr.smapList (σ : Subst Expr) : List Expr → List Expr
   | List.nil       => List.nil
@@ -279,7 +360,70 @@ instance SubstMap_Expr : SubstMap Expr Expr where
 def Expr.instantiate (e : Expr) (v : Value) : Expr :=
   Expr.smap (Subst.Action.su (.val v) :: (+0 : Subst Expr)) e
 
-/-! ## Heal context. -/
+/-! ## Forward field-access analysis (Phase L).
+
+    `fieldSitesAt p k` collects every field name `f` such that the
+    expression `p` syntactically contains a projection `(var k).f`.
+    This is the static, over-approximate set of field accesses on
+    the de-Bruijn-`k`-bound variable. At a `let τ = gen … in p`
+    redex, the runtime calls `fieldSitesAt p 0` and, if the materialized
+    record value `v` lacks any of those fields, retries the gen with
+    the missing-field constraint as feedback (`Step.letGenHealRecordFields`,
+    Reduction.lean). The analysis does not look through values, JS,
+    `letPrinc`, or principal scope (those don't bind regular Expr
+    de Bruijn indices). It does correctly shift under `letE` and
+    `forE`, the only Expr-binding constructors. -/
+mutual
+
+def Expr.fieldSitesAt : Expr → Nat → List String
+  | .proj (.var k') f, k => if k' = k then [f] else []
+  | .proj e _, k         => Expr.fieldSitesAt e k
+  | .val _, _            => []
+  | .var _, _            => []
+  | .letE _ e1 e2, k     => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 (k + 1)
+  | .ifE e1 e2 e3, k     => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 k ++ Expr.fieldSitesAt e3 k
+  | .whileE e1 e2, k     => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 k
+  | .forE e1 e2, k       => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 (k + 1)
+  | .seq e1 e2, k        => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 k
+  | .ask _, _            => []
+  | .say _, _            => []
+  | .letPrinc _ body, k  => Expr.fieldSitesAt body k
+  | .gen _ _ _, _        => []
+  | .agent _ _, _        => []
+  | .evalE f args, k     => Expr.fieldSitesAt f k ++ Expr.fieldSitesAtList args k
+  | .enforce e, k        => Expr.fieldSitesAt e k
+  | .js _, _             => []
+  | .varDecl _ _ e1 e2, k => Expr.fieldSitesAt e1 k ++ Expr.fieldSitesAt e2 k
+  | .assign _ e, k       => Expr.fieldSitesAt e k
+  | .varRead _, _        => []
+
+def Expr.fieldSitesAtList : List Expr → Nat → List String
+  | List.nil, _       => []
+  | List.cons e es, k => Expr.fieldSitesAt e k ++ Expr.fieldSitesAtList es k
+
+end
+
+/-- Whether the record value `v` (or vacuously, any non-record) supplies
+    every field in `sites`. Used by `Step.letGenSuccessHealable` to
+    enforce that the materialized record covers every forward
+    projection on the bound variable; failure routes through
+    `Step.letGenHealRecordFields` instead. Non-records pass vacuously
+    because the static `StaticTypeOK` check would already have rejected
+    a forward projection on a non-record-typed bound variable. -/
+def Value.recordSatisfies : Value → List String → Bool
+  | .recV fs, sites => sites.all (fun f => (fs.lookup f).isSome)
+  | _, _            => true
+
+@[simp] theorem Value.recordSatisfies_nil (v : Value) :
+    Value.recordSatisfies v [] = true := by
+  cases v <;> simp [Value.recordSatisfies]
+
+/-- Discharge for the common case: when the let-gen continuation is the
+    bare bound variable `var 0`, the forward field-access analysis is
+    empty and `recordSatisfies` holds vacuously. -/
+@[simp] theorem Value.recordSatisfies_var0 (v : Value) :
+    Value.recordSatisfies v ((Expr.var 0).fieldSitesAt 0) = true := by
+  simp [Expr.fieldSitesAt]
 
 abbrev ErrCtx := List Event
 
