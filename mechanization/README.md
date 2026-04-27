@@ -10,7 +10,7 @@ Lean 4 formalization of the HADL operational semantics from §4 of the paper.
 | `thm:hadl-sound` | T2 Staged Materialization Soundness | ✅ proven |
 | `thm:hadl-sound` | T3 Policy Monotonicity | ✅ proven (explicit case enumeration) |
 | `thm:hadl-sound` | T4a No-Heal-After-Budget | ✅ proven (`Safety.lean`, direct negation) |
-| `thm:hadl-sound` | T4b Truthful Gen/Agent Success (root) | ✅ proven (`Safety.lean`, `Safety2.lean`) |
+| `thm:hadl-sound` | T4b Truthful Gen/Agent Success (root) | ✅ proven (`Safety.lean`) |
 | `thm:hadl-sound` | T4c trace progress (root let-redex only) | ⚠️ mechanized at root let-redex shape only — see *T4 scope note* below |
 | `thm:hadl-sound` | T4c pure-core termination | ⏳ argued only on paper |
 
@@ -33,7 +33,6 @@ T4_truthful_success_healable    : [propext, Classical.choice, Quot.sound]
 T4_truthful_success_agent       : [propext, Classical.choice, Quot.sound]
 T4_truthful_success_gen         : [propext, Classical.choice, Quot.sound]
 T4_progress_gen                 : [propext, Classical.choice, Quot.sound]
-T4_progress_gen_arrow           : [propext, Classical.choice, Quot.sound]
 T4_progress_agent               : [propext, Classical.choice, Quot.sound]
 nested_array_of_schema_succeeds : [propext, Classical.choice, Quot.sound]
 policyInstall_shrinks           : [propext, Classical.choice, Quot.sound]
@@ -50,7 +49,7 @@ T4 is mechanized as follows:
   `retries(ec) > retryBudget`, the standalone `gen τ s pr` form has *no*
   successor configuration. Stated as the *direct negation*
   `¬ ∃ C', Step O ⟨ec, P, σ, .gen τ s pr⟩ C'`.
-* **T4b Truthful gen-success** (`Safety.lean`, `Safety2.lean`) — an
+* **T4b Truthful gen-success** (`Safety.lean`) — an
   *eventually-truthful* oracle (existence of an err-context with bounded
   retries at which the oracle returns a well-typed authorized value)
   yields a successful step on the root let-redex
@@ -176,5 +175,4 @@ HADL/
 ├── Lemmas.lean       env-extension, weakening, policy-shrinkage, …
 ├── Soundness.lean    T1 / T2 / T3 theorems
 ├── Safety.lean       T4a, T4b (gen-local at root over `Step`)
-└── Safety2.lean      T4b/T4c agent + arrow analogues (root-only)
 ```

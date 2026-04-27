@@ -14,7 +14,6 @@ import HADL.Oracle
 import HADL.Config
 import HADL.Reduction
 import HADL.Safety
-import HADL.Safety2
 
 namespace HADL
 
@@ -76,7 +75,7 @@ theorem L9_10_progresses
     (hO : ∃ v, RtType v .tPolicy ∧ O s ec .tPolicy v) :
     ∃ C', Step O ⟨ec, P, σ, L9_genPolicy s⟩ C' :=
   T4_truthful_success_gen_healable O ec P σ .tPolicy s 0 π
-    (by simp [Ty.healable]) hauth hO
+    (by simp) hauth hO
 
 /-- L13-14 progresses: `let visits: Array[crf] = gen ...` with
     `crf : Schema`. The canonical nested-healing case — requires
@@ -111,6 +110,36 @@ theorem L17_progresses
     (`js visit.cost`, `js visit.patient_id`), the runtime retries the
     causal `gen` with the violated constraint as feedback" trigger. -/
 
+/-- **Generic missing-field self-heal (Phase L).** When the let-gen
+    continuation projects a single field `f` on `var 0`, the oracle
+    returns a record `fs` that does not contain `f`, and policy
+    permits, `letGenHealRecordFields` fires: an `Event.error` is
+    appended to `ec` and the redex retries.
+
+    The two clinical-trial examples L17 (`visit.cost` with missing
+    `cost`) and L18 (`visit.patient_id` with missing `patient_id`)
+    are 1-line corollaries below. -/
+theorem letGen_missing_field_heals
+    (O : Oracle) (P : Policy) (σ : Store)
+    (sV : String) (πGen : Principal) (f : String)
+    (fs : List (String × Value))
+    (hauth   : policyAllows P πGen .gen)
+    (hOmiss  : O sV [] .tSchema (.recV fs))
+    (hrt     : RtType (.recV fs) .tSchema)
+    (hmiss   : fs.lookup f = none) :
+    Step O
+      ⟨[], P, σ,
+       .letE .tSchema (.gen .tSchema sV (.bvar 0))
+             (.proj (.var 0) f)⟩
+      ⟨[Event.error s!"missing field {f}"], P, σ,
+       .letE .tSchema (.gen .tSchema sV (.bvar 0))
+             (.proj (.var 0) f)⟩ :=
+  Step.letGenHealRecordFields (π := πGen) (ε := s!"missing field {f}")
+    (by simp) hauth hOmiss hrt
+    StaticTypeOK.atSchema
+    (by simp [Value.recordSatisfies, Expr.fieldSitesAt, List.all, hmiss])
+    (by simp [ErrCtx.retries, retryBudget])
+
 /-- L17 (clinical_trial): `let visit : Schema = gen sV ; visit.cost`.
     Oracle returns a record without `"cost"` → forward analysis sees
     `cost` is required → `letGenHealRecordFields` fires. -/
@@ -127,11 +156,8 @@ theorem L17_visitCost_with_missing_field_heals
       ⟨[Event.error "missing field cost"], P, σ,
        .letE .tSchema (.gen .tSchema sV (.bvar 0))
              (.proj (.var 0) "cost")⟩ :=
-  Step.letGenHealRecordFields (π := πGen) (ε := "missing field cost")
-    (by simp [Ty.healable]) hauth hOmiss hrt
-    (StaticTypeOK.wildcardAtHealable (τbind := .tSchema) (τret := .tSchema) (by unfold Ty.healable; rfl) (by unfold Ty.healable; rfl))
-    (by decide)
-    (by decide)
+  letGen_missing_field_heals O P σ sV πGen "cost"
+    [("patient_id", .strV "p1")] hauth hOmiss hrt (by decide)
 
 /-- L18 (clinical_trial): `let visit : Schema = gen sV ; visit.patient_id`.
     Oracle returns a record without `"patient_id"` → heal fires. -/
@@ -148,11 +174,8 @@ theorem L18_patientId_self_heal
       ⟨[Event.error "missing field patient_id"], P, σ,
        .letE .tSchema (.gen .tSchema sV (.bvar 0))
              (.proj (.var 0) "patient_id")⟩ :=
-  Step.letGenHealRecordFields (π := πGen) (ε := "missing field patient_id")
-    (by simp [Ty.healable]) hauth hOmiss hrt
-    (StaticTypeOK.wildcardAtHealable (τbind := .tSchema) (τret := .tSchema) (by unfold Ty.healable; rfl) (by unfold Ty.healable; rfl))
-    (by decide)
-    (by decide)
+  letGen_missing_field_heals O P σ sV πGen "patient_id"
+    [("cost", .numV 0)] hauth hOmiss hrt (by decide)
 
 /-- **Heal-then-succeed cycle (Phase L).** A two-step `Steps` chain
     on the L17 redex demonstrating that the forward-projection
@@ -182,18 +205,14 @@ theorem L17_heal_then_succeed
          (.recV [("patient_id", .strV pid), ("cost", .numV n)])⟩ := by
   refine Steps.step
     (Step.letGenHealRecordFields (π := πGen) (ε := "missing field cost")
-      (by simp [Ty.healable]) hauth hOmiss hrtBad
-      (StaticTypeOK.wildcardAtHealable
-         (τbind := .tSchema) (τret := .tSchema)
-         (by unfold Ty.healable; rfl) (by unfold Ty.healable; rfl))
+      (by simp) hauth hOmiss hrtBad
+      (StaticTypeOK.atSchema)
       (by simp [Value.recordSatisfies, Expr.fieldSitesAt, List.all, List.lookup])
       (by decide)) ?_
   refine Steps.step
     (Step.letGenSuccessHealable (π := πGen)
-      (by simp [Ty.healable]) hauth hOgood hrtGood
-      (StaticTypeOK.wildcardAtHealable
-         (τbind := .tSchema) (τret := .tSchema)
-         (by unfold Ty.healable; rfl) (by unfold Ty.healable; rfl))
+      (by simp) hauth hOgood hrtGood
+      (StaticTypeOK.atSchema)
       (by simp [Value.recordSatisfies, Expr.fieldSitesAt, List.all, List.lookup]))
     Steps.refl
 theorem L20_progresses
@@ -290,14 +309,14 @@ theorem clinicalTrialPrefix_steps
   -- Step 1: seqCong on outer + letGenSuccessHealable Schema  (ec → [])
   refine Steps.step
     (Step.seqCong (Step.letGenSuccessHealable (π := πGen)
-      (by simp [Ty.healable]) hauthGen hoS hrtS StaticTypeOK.var0
+      (by simp) hauthGen hoS hrtS StaticTypeOK.var0
       (Value.recordSatisfies_var0 vS))) ?_
   -- Step 2: seqStep discards Schema value
   refine Steps.step Step.seqStep ?_
   -- Step 3: seqCong + letGenSuccessHealable Policy
   refine Steps.step
     (Step.seqCong (Step.letGenSuccessHealable (π := πGen)
-      (by simp [Ty.healable]) hauthGen hoP hrtP StaticTypeOK.var0
+      (by simp) hauthGen hoP hrtP StaticTypeOK.var0
       (Value.recordSatisfies_var0 vP))) ?_
   -- Step 4: seqStep discards Policy value
   refine Steps.step Step.seqStep ?_

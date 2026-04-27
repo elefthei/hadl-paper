@@ -5,7 +5,6 @@
 
 import HADL.Soundness
 import HADL.Safety
-import HADL.Safety2
 import HADL.Examples
 
 namespace HADL
@@ -50,10 +49,6 @@ namespace HADL
 #guard_msgs (info) in
 #print axioms T4_truthful_success_arrow
 
-/-- info: 'HADL.T4_progress_gen_arrow' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (info) in
-#print axioms T4_progress_gen_arrow
-
 /-- info: 'HADL.T4_truthful_success_healable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (info) in
 #print axioms T4_truthful_success_healable
@@ -69,10 +64,6 @@ namespace HADL
 /-- info: 'HADL.T4_progress_gen_healable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (info) in
 #print axioms T4_progress_gen_healable
-
-/-- info: 'HADL.T4_progress_gen_nested_array_of_schema' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (info) in
-#print axioms T4_progress_gen_nested_array_of_schema
 
 /-- info: 'HADL.T4_progress_gen_policy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (info) in

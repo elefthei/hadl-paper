@@ -40,7 +40,7 @@ theorem T4_truthful_success
       Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0)⟩ C' := by
   obtain ⟨ec, _hretries, v, hrt, hO, _⟩ := htruth
   exact ⟨ec, Store.empty, _,
-         Step.letGenSuccessHealable (π := π) (by simp [Ty.healable])
+         Step.letGenSuccessHealable (π := π) (by simp)
            hauth hO hrt StaticTypeOK.var0 (Value.recordSatisfies_var0 v)⟩
 
 /-- **T4b-Arrow (Truthful Success at arrow type).** Phase 3 analogue of
@@ -59,7 +59,7 @@ theorem T4_truthful_success_arrow
                     (.gen (.tArrow args ret) s (.bvar n)) (.var 0)⟩ C' := by
   obtain ⟨ec, _hretries, v, hrt, hO, _⟩ := htruth
   exact ⟨ec, Store.empty, _,
-         Step.letGenSuccessHealable (π := π) (by simp [Ty.healable])
+         Step.letGenSuccessHealable (π := π) (by simp)
            hauth hO hrt StaticTypeOK.var0 (Value.recordSatisfies_var0 v)⟩
 
 /-- **T4b-Healable (Truthful Success at any healable τ).** Parametric
@@ -111,5 +111,124 @@ theorem clinical_trial_visit_cost_projects
     Step O ⟨ec, P, σ, .proj (.val (.recV fs)) "cost"⟩
            ⟨ec, P, σ, .val (.numV n)⟩ :=
   Step.projStep h
+
+/-! ## Agent / progress family (formerly Safety2.lean — merged in Phase M).
+
+    These theorems take the raw `∃ v, RtType ∧ O ...` hypothesis form
+    used by the agent-family progress lemmas (vs the eventuallyTruthful
+    form above). The two hypothesis styles are interconvertible; both
+    are kept because each matches a distinct proof obligation in
+    downstream Examples.lean. -/
+
+/-- Agent analogue of `T4_truthful_success`. Carries the store through
+    unchanged. -/
+theorem T4_truthful_success_agent
+    (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (n : Nat) (π : Principal)
+    (hauth : policyAllows P π .agent)
+    (hO : ∃ v, RtType v .tString ∧ O s ec .tString v) :
+    ∃ C', Step O ⟨ec, P, σ, .agent s (.bvar n)⟩ C' := by
+  obtain ⟨v, hrt, ho⟩ := hO
+  exact ⟨_, Step.agentSuccess (π := π) hauth ho hrt⟩
+
+/-- **Gen success at any healable `τ` (parametric).** Subsumes
+    `T4_truthful_success_gen` and `T4_truthful_success_gen_arrow`: with
+    `gen` as a let-only redex, success fires on `let _ : τ = gen τ s π ; var 0`
+    for any `τ` with `Ty.healable τ = true`. The shape-specific Schema and
+    Arrow forms below are one-line corollaries. -/
+theorem T4_truthful_success_gen_healable
+    (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (τ : Ty)
+    (s : String) (n : Nat) (π : Principal)
+    (hheal : Ty.healable τ = true)
+    (hauth : policyAllows P π .gen)
+    (hO : ∃ v, RtType v τ ∧ O s ec τ v) :
+    ∃ C',
+      Step O ⟨ec, P, σ, .letE τ (.gen τ s (.bvar n)) (.var 0)⟩ C' := by
+  obtain ⟨v, hrt, ho⟩ := hO
+  exact ⟨_, Step.letGenSuccessHealable (π := π) hheal hauth ho hrt StaticTypeOK.var0
+              (Value.recordSatisfies_var0 v)⟩
+
+/-- **Progress for `gen` at any healable `τ` (parametric).** Subsumes
+    `T4_progress_gen` and `T4_progress_gen_arrow`. The let-redex
+    `let _ : τ = gen τ s π ; var 0` has a successor whenever the policy
+    allows, the oracle is locally truthful, and `Healable τ`. -/
+theorem T4_progress_gen_healable
+    (O : Oracle) (C : Config) (τ : Ty) (s : String) (n : Nat) (π : Principal)
+    (hC : C.expr = .letE τ (.gen τ s (.bvar n)) (.var 0))
+    (_hwf : Config.WF C)
+    (hheal : Ty.healable τ = true)
+    (hauth : policyAllows C.pol π .gen)
+    (hO : ∃ v, RtType v τ ∧ O s C.err τ v) :
+    ∃ C', Step O C C' := by
+  rcases C with ⟨ec, P, σ, e⟩
+  cases hC
+  exact T4_truthful_success_gen_healable O ec P σ τ s n π hheal hauth hO
+
+/-- Schema corollary of the parametric gen-success theorem. -/
+theorem T4_truthful_success_gen
+    (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (n : Nat) (π : Principal)
+    (hauth : policyAllows P π .gen)
+    (hO : ∃ v, RtType v .tSchema ∧ O s ec .tSchema v) :
+    ∃ C',
+      Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0)⟩ C' :=
+  T4_truthful_success_gen_healable O ec P σ .tSchema s n π
+    (by simp) hauth hO
+
+/-- Schema corollary of the parametric gen-progress theorem. -/
+theorem T4_progress_gen
+    (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
+    (hC : C.expr = .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0))
+    (hwf : Config.WF C)
+    (hauth : policyAllows C.pol π .gen)
+    (hO : ∃ v, RtType v .tSchema ∧ O s C.err .tSchema v) :
+    ∃ C', Step O C C' :=
+  T4_progress_gen_healable O C .tSchema s n π hC hwf
+    (by simp) hauth hO
+
+/-- Arrow corollary of the parametric gen-success theorem (success-form
+    only — the progress-form `T4_progress_gen_arrow` was dropped during
+    the Phase M simplification pass as it was a 1-line specialization
+    with no callers). -/
+theorem T4_truthful_success_gen_arrow
+    (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store)
+    (args : List Ty) (ret : Ty) (s : String) (n : Nat) (π : Principal)
+    (hauth : policyAllows P π .gen)
+    (hO : ∃ v, RtType v (.tArrow args ret) ∧ O s ec (.tArrow args ret) v) :
+    ∃ C',
+      Step O ⟨ec, P, σ,
+              .letE (.tArrow args ret)
+                    (.gen (.tArrow args ret) s (.bvar n)) (.var 0)⟩ C' :=
+  T4_truthful_success_gen_healable O ec P σ (.tArrow args ret) s n π
+    (by simp) hauth hO
+
+/-- **Clinical-trial `gen` at Policy (paper L9-10).** A let-redex at
+    `tPolicy` — `let policy: Policy = gen "..." ; var 0` from
+    `figures/clinical_trial.tex` line 9-10 — has a successor under any
+    locally-truthful oracle producing a `polV` value. Mechanizes the
+    "gradual policy typing" claim from the paper caption: oracle-
+    generated policies are first-class healable materializations,
+    handled by the same parametric `letGenSuccessHealable` rule that
+    covers Schema and Array[Schema]. -/
+theorem T4_progress_gen_policy
+    (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
+    (hC : C.expr = .letE .tPolicy (.gen .tPolicy s (.bvar n)) (.var 0))
+    (hwf : Config.WF C)
+    (hauth : policyAllows C.pol π .gen)
+    (hO : ∃ v, RtType v .tPolicy ∧ O s C.err .tPolicy v) :
+    ∃ C', Step O C C' :=
+  T4_progress_gen_healable O C .tPolicy s n π hC hwf
+    (by simp) hauth hO
+
+/-- Progress for `agent`. -/
+theorem T4_progress_agent
+    (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
+    (hC : C.expr = .agent s (.bvar n))
+    (_hwf : Config.WF C)
+    (hauth : policyAllows C.pol π .agent)
+    (hO : ∃ v, RtType v .tString ∧ O s C.err .tString v) :
+    ∃ C', Step O C C' := by
+  rcases C with ⟨ec, P, σ, e⟩
+  cases hC
+  exact T4_truthful_success_agent O ec P σ s n π hauth hO
+
 
 end HADL

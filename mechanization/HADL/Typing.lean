@@ -125,6 +125,33 @@ decreasing_by
 
 end
 
+/-! ### `Ty.healable` evaluation lemmas.
+    The mutual block above prevents `@[simp]` on the definition itself.
+    These leaf lemmas let `simp` (and plain `rfl`) discharge healability
+    obligations on closed atomic types without unfolding through
+    `Ty.healable`. For composite cases (`tArray T`, `tRecord fs`),
+    callers still write `simp [Ty.healable]` to trigger the def's
+    own equational lemmas. -/
+
+@[simp] theorem Ty.healable_tSchema : Ty.healable .tSchema = true := by
+  unfold Ty.healable; rfl
+
+@[simp] theorem Ty.healable_tPolicy : Ty.healable .tPolicy = true := by
+  unfold Ty.healable; rfl
+
+@[simp] theorem Ty.healable_tArrow (args : List Ty) (ret : Ty) :
+    Ty.healable (.tArrow args ret) = true := by
+  unfold Ty.healable; rfl
+
+@[simp] theorem Ty.healable_tUnit   : Ty.healable .tUnit   = false := by
+  unfold Ty.healable; rfl
+@[simp] theorem Ty.healable_tBool   : Ty.healable .tBool   = false := by
+  unfold Ty.healable; rfl
+@[simp] theorem Ty.healable_tNumber : Ty.healable .tNumber = false := by
+  unfold Ty.healable; rfl
+@[simp] theorem Ty.healable_tString : Ty.healable .tString = false := by
+  unfold Ty.healable; rfl
+
 /-- Static typeability of expressions under a single-variable context.
     `StaticTypeOK τbind p τret` witnesses that `p` type-checks at `τret`
     when de-Bruijn `var 0` is bound at `τbind`. Black-boxed like
@@ -162,6 +189,18 @@ inductive StaticTypeOK : Ty → Expr → Ty → Prop where
   /-- Any value expression is typeable at any type; parallels
       `StType.valueWildcard`. -/
   | valueWildcard {τbind v τ} : StaticTypeOK τbind (.val v) τ
+
+/-- **Convenience constructor** for the `τbind = τret = .tSchema` case
+    of `StaticTypeOK.wildcardAtHealable`. The Phase L worked examples
+    in `Examples.lean` repeatedly need a `StaticTypeOK .tSchema p
+    .tSchema` witness for continuations of the form `proj (var 0) f`;
+    this saves the boilerplate of supplying the two healability
+    obligations and the explicit type annotations. -/
+@[reducible] def StaticTypeOK.atSchema {e : Expr} :
+    StaticTypeOK .tSchema e .tSchema :=
+  StaticTypeOK.wildcardAtHealable
+    (τbind := .tSchema) (τret := .tSchema)
+    Ty.healable_tSchema Ty.healable_tSchema
 
 /-- Static typing over closed expressions. Black-boxed: the paper
     re-runs the structural checker and Lean treats acceptance as an
