@@ -1,7 +1,7 @@
 import Lake
 open Lake DSL
 
-package HADL
+package Pact
 
 require "leanprover-community" / "batteries" @ git "v4.29.0"
 
@@ -14,5 +14,5 @@ require "Cedar" from git
   "https://github.com/cedar-policy/cedar-spec" @ "main" / "cedar-lean"
 
 @[default_target]
-lean_lib HADL where
+lean_lib Pact where
   defaultFacets := #[LeanLib.staticFacet]

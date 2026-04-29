@@ -1,4 +1,4 @@
-\documentclass[acmsmall,screen,review]{acmart}
+\documentclass[sigconf,screen,review]{acmart}
 \input{lib}
 
 %% Bibliography style
@@ -21,7 +21,7 @@
 
 \begin{document}
 
-\title{Hierarchical Agentic Dataflow Language: Plans All the Way Down}
+\title{Pact: Programmatic Agent Controlled Types --- Plans All the Way Down}
 
 \authoranon{
 \author{First Author}
@@ -47,7 +47,7 @@
 
 \begin{abstract}
   Effective use of LLM CLIs requires meticulous use of plan mode. A plan is a sequence of steps in natural language to be executed by the agent. Our central observation is that agentic plans are programs, which we call \emph{agentic workflows}. If plans are programs, then type systems, static analysis, and authorization semantics should apply directly. A deeper observation is that the LLM is not merely a value producer but a generator of program structure. Tool calls can produce types that govern subsequent data, workflows that will be executed as subroutines, and policies that restrict future operations.
-  We present HADL, a typed imperative domain-specific language in which human interaction, LLM tool invocation, and LLM reasoning are first-class typed expressions composable with mutable state, unbounded loops, structured iteration, and nested workflow composition. The central mechanism is \emph{gradual validation}, a staged re-checking discipline under which types, workflows, and policies produced by an LLM are checked against their declared types when put to use, under the same type discipline that governs the rest of the program. Gradual validation is not gradual typing in the classical sense: it inserts no runtime casts and does not satisfy the gradual guarantee. The contribution is the unification of three LLM-generation patterns (type, workflow, policy) under one re-checking mechanism plus a bounded feedback-driven retry. When validation rejects an LLM output, HADL \emph{self-heals} by rerunning the generator with the violated constraint and the recorded error, turning type errors on LLM output into bounded retries instead of aborts.
+  We present Pact, a typed imperative domain-specific language in which human interaction, LLM tool invocation, and LLM reasoning are first-class typed expressions composable with mutable state, unbounded loops, structured iteration, and nested workflow composition. The central mechanism is \emph{gradual validation}, a staged re-checking discipline under which types, workflows, and policies produced by an LLM are checked against their declared types when put to use, under the same type discipline that governs the rest of the program. Gradual validation is not gradual typing in the classical sense: it inserts no runtime casts and does not satisfy the gradual guarantee. The contribution is the unification of three LLM-generation patterns (type, workflow, policy) under one re-checking mechanism plus a bounded feedback-driven retry. When validation rejects an LLM output, Pact \emph{self-heals} by rerunning the generator with the violated constraint and the recorded error, turning type errors on LLM output into bounded retries instead of aborts.
 \end{abstract}
 
 \maketitle

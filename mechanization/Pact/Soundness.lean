@@ -1,14 +1,14 @@
--- Soundness theorems for the substitution-based HADL model (two-sort).
+-- Soundness theorems for the substitution-based Pact model (two-sort).
 --
 -- T1 WF-Preservation, T2 Staged Materialization, T3 Policy Monotonicity.
 
-import HADL.Syntax
-import HADL.Typing
-import HADL.Policy
-import HADL.Config
-import HADL.Reduction
+import Pact.Syntax
+import Pact.Typing
+import Pact.Policy
+import Pact.Config
+import Pact.Reduction
 
-namespace HADL
+namespace Pact
 
 /-- **T1 (WF-Preservation).** If `C` is well-formed and `C ⟶ C'`, then
     `C'` is well-formed. -/
@@ -238,4 +238,4 @@ theorem T3_policy_monotonicity
   | projCong _ ih => exact ih
   | projStep _ => exact Set.Subset.rfl
 
-end HADL
+end Pact

@@ -5,14 +5,14 @@
 -- gives us an iterated application of Cedar's `unchanged_deny_when_add_forbid`
 -- to discharge `policyInstall_shrinks` without any free axioms.
 
-import HADL.Syntax
+import Pact.Syntax
 import Mathlib.Data.Set.Basic
 import Cedar.Spec
 import Cedar.Thm.Authorization
 
-namespace HADL
+namespace Pact
 
-/-- The HADL policy state is a Cedar policy list. -/
+/-- The Pact policy state is a Cedar policy list. -/
 abbrev Policy : Type := Cedar.Spec.Policies
 
 inductive Action where
@@ -112,4 +112,4 @@ theorem policyInstall_shrinks
     rw [hpa] at this
     cases this
 
-end HADL
+end Pact

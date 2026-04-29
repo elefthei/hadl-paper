@@ -2,14 +2,14 @@
 -- is eventually truthful and the policy allows the action.
 -- Phase B target: discharge the sorries.
 
-import HADL.Syntax
-import HADL.Typing
-import HADL.Policy
-import HADL.Oracle
-import HADL.Config
-import HADL.Reduction
+import Pact.Syntax
+import Pact.Typing
+import Pact.Policy
+import Pact.Oracle
+import Pact.Config
+import Pact.Reduction
 
-namespace HADL
+namespace Pact
 
 /-- **T4a (Budget → No Heal).** With `gen` no longer a standalone redex,
     the standalone `gen τ s pr` has *no* transitions at all. (`gen` only
@@ -231,4 +231,4 @@ theorem T4_progress_agent
   exact T4_truthful_success_agent O ec P σ s n π hauth hO
 
 
-end HADL
+end Pact

@@ -1,16 +1,16 @@
 -- Small-step reduction over 4-tuple configurations, substitution-based CBV.
 -- Two-sort values + mutable-state store.
 
-import HADL.Syntax
-import HADL.Typing
-import HADL.Policy
-import HADL.Oracle
-import HADL.JsAxioms
-import HADL.Config
+import Pact.Syntax
+import Pact.Typing
+import Pact.Policy
+import Pact.Oracle
+import Pact.JsAxioms
+import Pact.Config
 
 open LeanSubst
 
-namespace HADL
+namespace Pact
 
 /-- Oracle action tag: gen / agent. Shared between success and
     type-heal rules. -/
@@ -95,7 +95,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       Step O ⟨ec, P, σ, .say s⟩ ⟨ec, P, σ, .val .unitV⟩
 
   /-- Oracle ask: consult `O`, flush heal context to `[]` on success
-      (per `hadl-formal.md`: Σ stores only errors and becomes empty on
+      (per `pact-formal.md`: Σ stores only errors and becomes empty on
       a successful oracle step). -/
   | askStep {ec P σ s v}
       (horacle : O s ec .tString v)
@@ -133,7 +133,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   -- Let-redex rules for `gen τ s π`.
   --
   -- `gen` is NOT a standalone redex anymore — it only reduces as the
-  -- immediate RHS of a `let`. Per `hadl-formal.md`:
+  -- immediate RHS of a `let`. Per `pact-formal.md`:
   --   * Success flushes `ec` to `[]` (not `ec ++ [Event.success]`).
   --   * Self-heal at healable τ is driven by *continuation* typing
   --     failure, not by value typing failure.
@@ -192,7 +192,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
              ⟨ec ++ [Event.error (explainPolicy (.gen τ s π) P)], P, σ,
               .letE τ (.gen τ s pr) p⟩
 
-  -- Schema triad (Phase 1), continuation-driven per hadl-formal.md.
+  -- Schema triad (Phase 1), continuation-driven per pact-formal.md.
 
   /-- Parametric let-redex success at any healable τ (paper-aligned).
       The oracle returned a well-typed value at a healable target type,
@@ -379,4 +379,4 @@ inductive Steps (O : Oracle) : Config → Config → Prop where
   | refl {C} : Steps O C C
   | step {C C' C''} : Step O C C' → Steps O C' C'' → Steps O C C''
 
-end HADL
+end Pact

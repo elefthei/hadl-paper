@@ -7,15 +7,15 @@
 -- break Schema / Policy / Array[Schema] gen or record projection
 -- will fail one of the per-redex progress lemmas below.
 
-import HADL.Syntax
-import HADL.Typing
-import HADL.Policy
-import HADL.Oracle
-import HADL.Config
-import HADL.Reduction
-import HADL.Safety
+import Pact.Syntax
+import Pact.Typing
+import Pact.Policy
+import Pact.Oracle
+import Pact.Config
+import Pact.Reduction
+import Pact.Safety
 
-namespace HADL
+namespace Pact
 
 namespace ClinicalTrial
 
@@ -332,4 +332,4 @@ theorem clinicalTrialPrefix_steps
 
 end ClinicalTrial
 
-end HADL
+end Pact

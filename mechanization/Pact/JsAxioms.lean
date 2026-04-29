@@ -10,10 +10,10 @@
 -- and re-prove `jsEval_wellTyped` from that axiom; this is a future-work item
 -- and would add one user axiom to the allowlist checked in `AxiomCheck.lean`.
 
-import HADL.Syntax
-import HADL.Typing
+import Pact.Syntax
+import Pact.Typing
 
-namespace HADL
+namespace Pact
 
 /-- Trivial total evaluator for `js` expressions. -/
 def jsEval : JsExpr → Option Value := fun _ => none
@@ -26,4 +26,4 @@ theorem jsEval_wellTyped
   intro h _
   simp [jsEval] at h
 
-end HADL
+end Pact

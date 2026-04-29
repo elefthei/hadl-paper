@@ -1,4 +1,4 @@
--- Syntax of HADL: types, values, de-Bruijn expressions.
+-- Syntax of Pact: types, values, de-Bruijn expressions.
 -- Two-sort presentation: `Value` is its own inductive; `Expr.val`
 -- embeds values into expressions.
 --
@@ -13,7 +13,7 @@ import LeanSubst
 
 open LeanSubst
 
-namespace HADL
+namespace Pact
 
 /-- A principal: a meta-level newtype around a `Nat` tag. This struct
     is **not** an `Expr`-level value (there is no `Value.principalV`);
@@ -575,4 +575,4 @@ def Store.get (σ : Store) (x : String) : Option (Ty × Value) := σ x
 def Store.set (σ : Store) (x : String) (τ : Ty) (v : Value) : Store :=
   fun y => if y = x then some (τ, v) else σ y
 
-end HADL
+end Pact

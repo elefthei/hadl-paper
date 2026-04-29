@@ -9,22 +9,28 @@ This section presents the \hadl type system and the gradual validation mechanism
 Figure~\ref{fig:syntax} presents the abstract syntax. A program is pragmas followed by declarations. Types include base types (now including \texttt{Principal} and \texttt{Path}), \texttt{Schema}, arrow types, \texttt{Policy}, and named references. Expressions add to standard imperative constructs the four primitives, \texttt{js} interop, \texttt{eval}, \texttt{enforce}, comparisons, and the principal introducers \texttt{root} and \texttt{restrict}\;$e$. The \texttt{as} clause on \texttt{gen}/\texttt{agent} takes an expression of type \texttt{Principal}; the legacy literal-string form is dropped in favor of named principals (\texttt{let user: Principal = restrict root}).
 
 \begin{figure}[t]
+\small
+\setlength{\arraycolsep}{3pt}
 \[\begin{array}{rcll}
-P & ::= & \pi^*\; d^* & \textit{program} \\[4pt]
-\pi & ::= & \texttt{@policy}\; s \mid \texttt{@retries}\; n & \textit{pragmas} \\[4pt]
-d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{workflow decl.} \\
-  & \mid & \texttt{type}\; X = T & \textit{type decl.} \\[4pt]
-T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} \mid \texttt{Principal} \mid \texttt{Path} & \textit{base types} \\
-  & \mid & \texttt{Schema} \mid \texttt{Policy} \mid (T_1 \to T_2) & \textit{self-healing types} \\
-  & \mid & \texttt{array[}T\texttt{]} \mid \{ \overline{x_i{:}T_i} \} \mid X & \textit{composite types} \\[4pt]
-e & ::= & s \mid n \mid b \mid x & \textit{literals, vars} \\
-  & \mid & \texttt{let}\; x {:} T = e \mid \texttt{var}\; x {:} T = e \mid x = e & \textit{bindings} \\
-  & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] \mid \texttt{while}\; (e)\; \{e\} & \\
-  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} \mid e_1 ;\; e_2 & \\
+P & ::= & \pi^*\; d^* & \textit{program} \\[2pt]
+\pi & ::= & \texttt{@policy}\; s \mid \texttt{@retries}\; n & \textit{pragmas} \\[2pt]
+d & ::= & \texttt{workflow}\; f(\overline{x_i{:}T_i}) \to T\; \{e\} & \textit{wf.\ decl.} \\
+  & \mid & \texttt{type}\; X = T & \textit{type decl.} \\[2pt]
+T & ::= & () \mid \texttt{String} \mid \texttt{Number} \mid \texttt{Bool} & \textit{base types} \\
+  & \mid & \texttt{Principal} \mid \texttt{Path} & \\
+  & \mid & \texttt{Schema} \mid \texttt{Policy} \mid (T_1 \to T_2) & \textit{healable} \\
+  & \mid & \texttt{array[}T\texttt{]} \mid \{ \overline{x_i{:}T_i} \} \mid X & \textit{composite} \\[2pt]
+e & ::= & s \mid n \mid b \mid x & \textit{lits, vars} \\
+  & \mid & \texttt{let}\; x {:} T = e \mid \texttt{var}\; x {:} T = e & \textit{bindings} \\
+  & \mid & x = e \mid e_1 ;\; e_2 & \\
+  & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] & \textit{control} \\
+  & \mid & \texttt{while}\; (e)\; \{e\} \mid \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \\
   & \mid & \texttt{ask}\; s \mid \texttt{say}\; s & \textit{I/O} \\
   & \mid & \texttt{root} \mid \texttt{restrict}\; e & \textit{principals} \\
-  & \mid & \texttt{gen}\; s\; [\texttt{as}\; e] \mid \texttt{agent}\; s\; [\texttt{as}\; e] & \textit{LLM calls} \\
-  & \mid & \texttt{js}\; c \mid \texttt{eval}\; e\;(e_1, \ldots, e_k) \mid \texttt{enforce}\; x &
+  & \mid & \texttt{gen}\; s\; [\texttt{as}\; e] & \textit{LLM calls} \\
+  & \mid & \texttt{agent}\; s\; [\texttt{as}\; e] & \\
+  & \mid & \texttt{js}\; c \mid \texttt{enforce}\; x & \\
+  & \mid & \texttt{eval}\; e\;(e_1, \ldots, e_k) &
 \end{array}\]
 \caption{Abstract syntax of \hadl. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names. Arrow types are right-associative and curried: $T_1 \to T_2 \to T_3$ denotes $(T_1, T_2) \to T_3$ (an n-ary arrow). Arithmetic and comparison are delegated to \texttt{js} blocks. The \texttt{as} clause on \texttt{gen}/\texttt{agent} takes an expression of type \texttt{Principal}; \texttt{root} is the unrestricted built-in principal and \texttt{restrict}\;$e$ creates a fresh strictly-weaker child of an existing principal.}
 \label{fig:syntax}

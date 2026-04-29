@@ -32,28 +32,26 @@ retrying with schema-injected prompts on failure.
 
 \begin{table}[t]
 \centering
-\small\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lrcrrrl@{}}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrcrrcl@{}}
 \toprule
-System & LoC & done & runtime (s) & tok.\ in/out & queries/caught/missed & recovery \\
+System & LoC & \checkmark & rt (s) & tok.\ i/o & q/c/m & rec. \\
 \midrule
-\hadl                  & 14  & \textcolor{OliveGreen}{\checkmark} & 37.68     & 2380/1732    & 7\,/\,3\,/\,0  & automated \\
-LangGraph              & 128 & \textcolor{BrickRed}{$\times$}     & 27.50$^*$ & 407/1760$^*$ & 4\,/\,0\,/\,3  & ---       \\
-LangGraph+assertions   & 154 & \textcolor{OliveGreen}{\checkmark} & 81.19     & 1798/4605    & 10\,/\,9\,/\,0 & manual    \\
-DSPy                   & 102 & \textcolor{BrickRed}{$\times$}     & 34.06$^*$ & 359/2112$^*$ & 4\,/\,0\,/\,3  & ---       \\
-DSPy+assertions        & 135 & \textcolor{OliveGreen}{\checkmark} & 80.78     & 1783/4573    & 10\,/\,9\,/\,0 & manual    \\
+\sys              & 14  & \textcolor{OliveGreen}{\checkmark} & 37.7    & 2380/1732 & 7/3/0  & auto \\
+LangGraph         & 128 & \textcolor{BrickRed}{$\times$}     & 27.5$^*$ & 407/1760$^*$ & 4/0/3 & --- \\
+\;+assertions     & 154 & \textcolor{OliveGreen}{\checkmark} & 81.2    & 1798/4605 & 10/9/0 & manual \\
+DSPy              & 102 & \textcolor{BrickRed}{$\times$}     & 34.1$^*$ & 359/2112$^*$ & 4/0/3 & --- \\
+\;+assertions     & 135 & \textcolor{OliveGreen}{\checkmark} & 80.8    & 1783/4573 & 10/9/0 & manual \\
 \bottomrule
 \end{tabular}
 \caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times.
-  LoC counts non-empty, non-comment implementation lines.
-  The \emph{done} column marks whether all three runs completed. Plain baselines (marked $^*$)
-  crashed at a field-access error, so their runtime and token figures cover only the calls
-  made up to that point.
-  Queries, caught, and missed are the mean LLM calls per run and the total violations
-  detected or silently bypassed across all three runs.
-  Recovery describes how violations are handled: \emph{automated} means the language
-  enforces it structurally with no developer effort, \emph{manual} means the developer
-  wrote the check explicitly in application code, and --- means no enforcement exists.}
+  \emph{LoC} counts non-empty, non-comment implementation lines;
+  \checkmark marks whether all three runs completed;
+  \emph{rt} is mean wall-clock runtime in seconds;
+  \emph{tok.\ i/o} is mean input/output tokens;
+  \emph{q/c/m} is mean LLM calls and total violations caught/missed across runs;
+  \emph{rec.} is recovery (\emph{auto}: language-enforced; \emph{manual}: developer-written; \emph{---}: none).
+  Plain baselines ($^*$) crashed at a field-access error; their figures cover only calls up to that point.}
 \label{tab:eval-clinical}
 \end{table}
 
@@ -67,7 +65,7 @@ The direct field access \texttt{visit["cost"]} raises a \texttt{KeyError} and th
 Three missed violations per system ($K=3$ runs) reflect that the frameworks provide no mechanism
 to detect or prevent the omission.
 
-\paragraph{HADL completes with automated self-healing.}
+\paragraph{Pact completes with automated self-healing.}
 \hadl completed all three runs successfully.
 On each run, the initial \texttt{crf} schema generation omitted the \texttt{cost} field, a
 tracking field not surfaced by a bare clinical prompt.

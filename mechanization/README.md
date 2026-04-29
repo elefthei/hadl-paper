@@ -1,6 +1,6 @@
-# HADL Mechanization
+# Pact Mechanization
 
-Lean 4 formalization of the HADL operational semantics from §4 of the paper.
+Lean 4 formalization of the Pact operational semantics from §4 of the paper.
 
 ## Status
 
@@ -150,23 +150,23 @@ Beyond Lean's standard meta-axioms (`propext`, `Classical.choice`,
 opaque constants below are *declared functions* (no body), not axioms,
 and do not appear in `#print axioms`:
 
-- `parsePolicies` (`HADL/Policy.lean`): opaque Cedar policy parser —
+- `parsePolicies` (`Pact/Policy.lean`): opaque Cedar policy parser —
   the implementation is delegated to the host; install-time shrinkage
   is proved from Cedar-Lean regardless of what the parser returns.
-- `jsEval` (`HADL/JsAxioms.lean`): stubbed to `fun _ _ => none`; the
+- `jsEval` (`Pact/JsAxioms.lean`): stubbed to `fun _ _ => none`; the
   associated well-typedness lemma is then vacuously true. Theorems
   quantified over `Expr.js _` are vacuously true on that fragment;
   this is intentional (JS semantics are out of scope).
-- `explainType`, `explainPolicy`, `provPrompt` (`HADL/Reduction.lean`):
+- `explainType`, `explainPolicy`, `provPrompt` (`Pact/Reduction.lean`):
   implementation-supplied diagnostics — their content never enters any
   safety theorem.
-- `JsExprNE` (`HADL/Syntax.lean`): nonemptiness carrier for the JS
+- `JsExprNE` (`Pact/Syntax.lean`): nonemptiness carrier for the JS
   expression syntax (the actual AST is host-supplied).
 
 ## File layout
 
 ```
-HADL/
+Pact/
 ├── Syntax.lean       types, expressions, values, events
 ├── Env.lean          typed environment + projection Γ(ρ)
 ├── Typing.lean       static and runtime typing judgments

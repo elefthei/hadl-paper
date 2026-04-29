@@ -7,9 +7,9 @@
 -- single-sort predecessor's typing strength — the refactor is
 -- feature-equivalent.
 
-import HADL.Syntax
+import Pact.Syntax
 
-namespace HADL
+namespace Pact
 
 /-- Runtime typing judgment `v : τ` on values.
 
@@ -162,7 +162,7 @@ end
     `StType` above: only the cases Soundness/Safety need are exposed.
     Used as the continuation-check premise in the healable-τ self-heal
     rules (Schema today; Policy/Arrow in Phases 2/3), per the
-    continuation-driven healing rule in `hadl-formal.md`.
+    continuation-driven healing rule in `pact-formal.md`.
 
     **Honest-retreat note (review remediation).** This predicate is a
     deliberate over-approximation: the three cases (`var0`,
@@ -292,4 +292,4 @@ theorem Store.set_set_ne {σ : Store} {x y : String} (τ₁ τ₂ : Ty) (v₁ v�
       simp [Store.set, hzx]
     · simp [Store.set, hzx, hzy]
 
-end HADL
+end Pact

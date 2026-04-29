@@ -1,10 +1,10 @@
 -- Oracle signature and eventual-truthfulness predicate.
 -- Nondeterministic oracle relation (two-sort: returns a `Value`).
 
-import HADL.Syntax
-import HADL.Typing
+import Pact.Syntax
+import Pact.Typing
 
-namespace HADL
+namespace Pact
 
 /-- The oracle: prompt × heal-context × expected-type ↦ returned value. -/
 abbrev Oracle := String → ErrCtx → Ty → Value → Prop
@@ -32,4 +32,4 @@ def eventuallyTruthful
 
 end Oracle
 
-end HADL
+end Pact

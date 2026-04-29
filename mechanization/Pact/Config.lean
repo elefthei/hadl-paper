@@ -3,11 +3,11 @@
 -- 4-tuple configuration ⟨Σ, Π, σ, e⟩ with a mutable-state store σ.
 -- The current principal π lives inside `gen`/`agent`/`evalE` syntax.
 
-import HADL.Syntax
-import HADL.Typing
-import HADL.Policy
+import Pact.Syntax
+import Pact.Typing
+import Pact.Policy
 
-namespace HADL
+namespace Pact
 
 /-- Four-tuple configuration. -/
 structure Config where
@@ -24,4 +24,4 @@ def retryBudget : Nat := 3
 def Config.WF (C : Config) : Prop :=
   ErrCtx.retries C.err ≤ retryBudget ∧ C.store.WF
 
-end HADL
+end Pact

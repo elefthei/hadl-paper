@@ -1,4 +1,4 @@
-import HADL.Reduction
+import Pact.Reduction
 
 open LeanSubst
 
@@ -26,7 +26,7 @@ PrincRef encountered at runtime in a closed program points into the
 dynamic entity store.
 -/
 
-namespace HADL
+namespace Pact
 
 /-! ## Monotonicity of `princOk` in `depth`. -/
 
@@ -760,4 +760,4 @@ theorem principal_indices_bounded {O : Oracle} {C C' : Config}
     Expr.princOk 0 C'.expr = true :=
   (hsteps.preserves_princOk hOracle hJs 0 he hσ).1
 
-end HADL
+end Pact

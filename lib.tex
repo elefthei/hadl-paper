@@ -20,7 +20,7 @@
 \usepackage[]{comments} % add option 'hide' to hide all
 \Commenter{lef}
 
-%%%%%%%%%%%%% Listings setup for HADL code examples
+%%%%%%%%%%%%% Listings setup for Pact code examples
 % Three keyword classes:
 %   [1] top-level constructs (workflow)         — black bold
 %   [2] expression-level keywords               — dark green bold
@@ -76,7 +76,8 @@
 \newtheorem{definition}{Definition}
 
 %%%%%%%%%%%%% Custom terms
-\newcommand{\hadl}{HADL\xspace}
+\newcommand{\sys}{Pact\xspace}
+\newcommand{\hadl}{\sys}
 \newcommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO:~#1]}}}
 
 %%%%%%%%%%%%% Theorem / judgment environments
@@ -85,7 +86,7 @@
 \newtheorem{corollary}{Corollary}
 \newtheorem{remark}{Remark}
 
-%%%%%%%%%%%%% HADL formal model — machine components
+%%%%%%%%%%%%% Pact formal model — machine components
 % Four-tuple configuration ⟨Θ, Π, σ, e⟩: heal context, installed policy,
 % mutable store, expression under reduction. \MConfig elides σ (used for
 % rules that leave the store unchanged); \MConfigS shows all four fields
@@ -99,12 +100,12 @@
 \newcommand{\MRetry}{N}
 \newcommand{\Inst}[2]{#1[#2/0]}
 
-%%%%%%%%%%%%% HADL formal model — event log (heal context)
+%%%%%%%%%%%%% Pact formal model — event log (heal context)
 \newcommand{\ErrEv}[1]{\mathsf{err}(#1)}
 \newcommand{\SucEv}{\mathsf{succ}}
 \newcommand{\retries}[1]{\mathsf{retries}(#1)}
 
-%%%%%%%%%%%%% HADL formal model — types
+%%%%%%%%%%%%% Pact formal model — types
 \newcommand{\Tunit}{\texttt{()}}
 \newcommand{\Tstring}{\texttt{String}}
 \newcommand{\Tnum}{\texttt{Number}}
@@ -119,12 +120,12 @@
 \newcommand{\Tref}[1]{#1}
 % Healable type predicate.
 \newcommand{\Healable}[1]{\mathsf{healable}(#1)}
-% Hard-error sink value produced by \rulename{Let-Gen-TypeError} and
-% \rulename{Let-Gen-BudgetError}; intentionally untypeable.
+% Hard-error sink value produced by \rulename{Gen-TypeErr} and
+% \rulename{Gen-Budget}; intentionally untypeable.
 \newcommand{\errV}{\bot_{\mathsf{err}}}
 \newcommand{\unit}{\texttt{()}}
 
-%%%%%%%%%%%%% HADL formal model — expressions (de-Bruijn, substitution-based)
+%%%%%%%%%%%%% Pact formal model — expressions (de-Bruijn, substitution-based)
 \newcommand{\Ask}[1]{\texttt{ask}\;#1}
 \newcommand{\Say}[1]{\texttt{say}\;#1}
 % gen: surface syntax is `gen s as π`; the type annotation lives on the
@@ -156,7 +157,7 @@
 \newcommand{\Forr}[2]{\texttt{for}\;x\;\texttt{in}\;#1\;\{#2\}}
 \newcommand{\Seq}[2]{#1\,;\,#2}
 
-%%%%%%%%%%%%% HADL formal model — judgments
+%%%%%%%%%%%%% Pact formal model — judgments
 % RtType is now envless: v : τ. Kept as shorthand for the ok-branch of
 % the type-check judgment \TJok on a closed value.
 \newcommand{\RtType}[2]{#1 : #2}
@@ -167,7 +168,7 @@
 % or \mathsf{err}(ε) where ε is the typing-error string fed back to the
 % oracle during self-healing. Applies to both values (runtime recheck of
 % an oracle response) and expressions (continuation check that drives
-% self-heal per hadl-formal.md). Matches hadl-formal.md.
+% self-heal per pact-formal.md). Matches pact-formal.md.
 \newcommand{\TJok}[3]{#1 \vdash #2 : #3 \;\Rightarrow\; \mathsf{ok}}
 \newcommand{\TJerr}[4]{#1 \vdash #2 : #3 \;\Rightarrow\; \mathsf{err}(#4)}
 % Context extension \Gamma, x : \tau used in continuation-driven heal
@@ -176,7 +177,7 @@
 \newcommand{\PolOk}[3]{#1;\,#2 \vdash #3 : \mathsf{ok}}
 \newcommand{\WF}[1]{\vdash #1 : \mathsf{wf}}
 
-%%%%%%%%%%%%% HADL formal model — reduction and oracle
+%%%%%%%%%%%%% Pact formal model — reduction and oracle
 \newcommand{\step}{\longrightarrow}
 \newcommand{\stepP}{\longrightarrow_{\mathsf{p}}}
 \newcommand{\steps}{\longrightarrow^{*}}
@@ -189,6 +190,6 @@
 \newcommand{\Allow}[1]{\mathsf{allow}(#1)}
 \newcommand{\Install}[2]{\mathsf{install}(#1,\,#2)}
 
-%%%%%%%%%%%%% HADL formal model — rule-name shortcut
+%%%%%%%%%%%%% Pact formal model — rule-name shortcut
 \newcommand{\rulename}[1]{\textsc{#1}}
 
