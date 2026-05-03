@@ -6,13 +6,13 @@ Lean 4 formalization of the Pact operational semantics from §4 of the paper.
 
 | Theorem | Clause | Status |
 |---|---|---|
-| `thm:hadl-sound` | T1 WF-Preservation | ✅ proven (all mechanized rules; jsEval-using cases vacuous — see footnote) |
-| `thm:hadl-sound` | T2 Staged Materialization Soundness | ✅ proven |
-| `thm:hadl-sound` | T3 Policy Monotonicity | ✅ proven (explicit case enumeration) |
-| `thm:hadl-sound` | T4a No-Heal-After-Budget | ✅ proven (`Safety.lean`, direct negation) |
-| `thm:hadl-sound` | T4b Truthful Gen/Agent Success (root) | ✅ proven (`Safety.lean`) |
-| `thm:hadl-sound` | T4c trace progress (root let-redex only) | ⚠️ mechanized at root let-redex shape only — see *T4 scope note* below |
-| `thm:hadl-sound` | T4c pure-core termination | ⏳ argued only on paper |
+| `thm:pact-sound` | T1 WF-Preservation | ✅ proven (all mechanized rules; jsEval-using cases vacuous — see footnote) |
+| `thm:pact-sound` | T2 Staged Materialization Soundness | ✅ proven |
+| `thm:pact-sound` | T3 Policy Monotonicity | ✅ proven (explicit case enumeration) |
+| `thm:pact-sound` | T4a No-Heal-After-Budget | ✅ proven (`Safety.lean`, direct negation) |
+| `thm:pact-sound` | T4b Truthful Gen/Agent Success (root) | ✅ proven (`Safety.lean`) |
+| `thm:pact-sound` | T4c trace progress (root let-redex only) | ⚠️ mechanized at root let-redex shape only — see *T4 scope note* below |
+| `thm:pact-sound` | T4c pure-core termination | ⏳ argued only on paper |
 
 > **jsEval footnote.** `jsEval := fun _ _ => none` is a deliberate stub
 > (JavaScript semantics are out of scope). Theorem statements quantified
@@ -71,7 +71,7 @@ T4 is mechanized as follows:
 * **T4c pure-core termination** — the only paper-level gap. Requires a
   well-founded measure on gen/agent/ask-free configurations plus a
   `While` termination hypothesis. The paper's footnote at
-  Theorem "hadl-sound" defers this; the mechanization follows.
+  Theorem "pact-sound" defers this; the mechanization follows.
 
 ### Operational relation
 

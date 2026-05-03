@@ -1,0 +1,87 @@
+\section{Future Work}
+\label{sec:future}
+
+Several directions remain open and we discuss each in turn.
+
+\paragraph{Path-sensitive continuation analysis.}
+The forward field-access analysis that drives schema self-healing 
+is intentionally sound but path-insensitive. It collects every 
+field projection on a bound variable that appears anywhere in the 
+continuation, including projections inside branches that may never 
+execute at runtime. This means the runtime can require the oracle 
+to supply fields that are only accessed in unreachable code, 
+forcing unnecessary retries. A path-sensitive analysis would track 
+which projections are reachable under each possible branch 
+condition and restrict the healing requirement accordingly. The 
+main challenge is that branch conditions in \pact{} can depend on 
+LLM-produced values, which are not known statically, so a 
+path-sensitive treatment would need to account for the 
+non-deterministic oracle in its reachability reasoning.
+
+\paragraph{Richer type structure.}
+The \pact{} type system is deliberately simple. Arrays are 
+homogeneously typed, records check only declared fields with no 
+row polymorphism or width subtyping, and there are no union or 
+intersection types. Each of these restrictions was made to keep 
+gradual validation tractable, but each also limits what workflows 
+can express without routing values through \texttt{Schema} and 
+deferring all shape checking to the post-materialization 
+re-checker. Row polymorphism would allow records to carry 
+additional fields beyond those declared, which is a natural fit 
+for LLM-produced JSON that routinely includes extra metadata. 
+Union types would allow a single \texttt{gen} binding to produce 
+one of several shapes depending on the reasoning context, removing 
+the need to route such cases through an untyped \texttt{Schema} 
+binding. Refinement types would allow constraints on field values, 
+not just field presence, which would make the re-checking 
+discipline more expressive without changing its fundamental 
+structure.
+
+\paragraph{Effect tracking for host-language escapes.}
+Inline \texttt{js} blocks execute arbitrary JavaScript under the 
+host runtime's ambient authority. The current type system treats 
+these blocks as oracular, accepting whatever value the JavaScript 
+engine produces without modelling its side effects. This means 
+that a \texttt{js} block can perform file I/O, network requests, 
+or other host-side effects that are invisible to the \pact{} type 
+checker and to the Cedar authorization model. An effect system 
+that tracks which capabilities a \texttt{js} block exercises would 
+allow the runtime to enforce that host-language escapes are 
+consistent with the installed policy, extending the 
+language-level control that \pact{} currently provides for 
+\texttt{gen} and \texttt{agent} to the full program.
+
+\begin{sloppypar}
+\paragraph{Prompt-injection-aware information flow.}
+The current threat model identifies prompt injection as outside
+the scope of gradual validation. A \texttt{gen} prompt composed
+from an \texttt{ask} result can be steered by an adversary who
+controls the operator input, and the type system has no mechanism
+to detect or prevent this. Information-flow tracking at the string
+level would allow the runtime to label values by their source,
+distinguishing programmer-authored text from operator-supplied
+text from LLM-produced text, and to enforce policies over how
+labeled values flow into prompt positions. The \texttt{ask} and
+\texttt{gen} primitive separation already makes the source of each
+value syntactically visible, which is a natural starting point
+for such an analysis.
+\end{sloppypar}
+
+\paragraph{Parallel \texttt{gen} and modular workflow imports.}
+The current operational semantics is fully sequential. All 
+\texttt{gen} and \texttt{agent} calls execute one at a time under 
+a single evolving Cedar policy. Many practical workflows could 
+benefit from parallel generation, where independent \texttt{gen} 
+calls that do not share data dependencies execute concurrently. 
+Extending the semantics to support parallel \texttt{gen} would 
+require a confluence argument showing that concurrent 
+materialization and policy installation remain consistent, 
+particularly given that \texttt{enforce} is append-only and 
+policy monotonicity must be preserved across parallel steps. 
+Separately, the current language has no module system. Workflows 
+are declared within a single program and cannot be imported from 
+external sources. Modular workflow imports would allow 
+organizations to share typed workflow libraries, but would require 
+an interface language for workflow types and a trust model for 
+imported code that interacts cleanly with the existing Cedar 
+authorization model.

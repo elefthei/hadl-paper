@@ -1,5 +1,5 @@
 \begin{figure}[H]
-\begin{lstlisting}[language=hadl,showstringspaces=false]
+\begin{lstlisting}[language=pact,showstringspaces=false]
 @retries 3
 
 workflow clinical_trial() -> String {
@@ -12,9 +12,10 @@ workflow clinical_trial() -> String {
   let num_visits = ask "How many patient visits to simulate?"
   let visits: Array[crf] =
     gen "Simulate CRF info for `num_visits` patient visits for `trial`"
+    as coordinator
   var total_cost: Number = 0
   for visit in visits {
-    total_cost = js (cost + visit.cost)
+    total_cost = js (total_cost + visit.cost)
     say "Visit `js visit.patient_id`: cost `js visit.cost`"
   }
   agent "Write final report for the `visits`"

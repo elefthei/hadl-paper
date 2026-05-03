@@ -1,7 +1,7 @@
 \begin{figure*}[t]
 \centering
 \begin{subfigure}[c]{0.54\linewidth}
-\begin{lstlisting}[language=hadl,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
+\begin{lstlisting}[language=pact,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
 workflow pick_car() -> String {
   let prefs = ask "What matters most to you?"
   let car_schema: Schema = gen "Generate a
@@ -38,7 +38,7 @@ workflow pick_car() -> String {
 \end{tikzpicture}
 \end{minipage}%
 \begin{subfigure}[c]{0.37\linewidth}
-\begin{lstlisting}[language=hadl,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
+\begin{lstlisting}[language=pact,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
 // produced by the gen
 // call on line 5 above
 workflow score(car: car_schema)
@@ -54,6 +54,9 @@ workflow score(car: car_schema)
 \end{lstlisting}
 \subcaption{Generated workflow.}
 \end{subfigure}
-\caption{Car-recommendation outer workflow (left) generates the scorer (right) via arrow-typed \texttt{gen}; see \sect{app:overview-example}.}
+\caption{Car-recommendation outer workflow (left) generates the scorer 
+(right) via arrow-typed \texttt{gen}. The outer workflow declares only 
+the type contract the scorer must satisfy; the LLM supplies the scoring 
+logic, and \pact enforces the declared type at the \texttt{eval} site.}
 \label{fig:overview-workflow}
 \end{figure*}

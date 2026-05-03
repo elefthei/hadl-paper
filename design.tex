@@ -1,12 +1,14 @@
 \section{Design}
 \label{sec:design}
 
-This section presents the \hadl type system and the gradual validation mechanism that unifies type generation, workflow generation, and policy generation. We describe the abstract syntax, the correspondence between \hadl types and JavaScript types, and the three forms of gradual validation that check LLM-produced types, programs, and authorization policies at runtime. \sect{sec:semantics} gives the operational semantics and soundness theorem.
+This section presents the \pact type system and the gradual validation mechanism that unifies type generation, workflow generation, and policy generation. We describe the abstract syntax, the correspondence between \pact types and JavaScript types, and the three forms of gradual validation that check LLM-produced types, programs, and authorization policies at runtime. \sect{sec:semantics} gives the operational semantics and soundness theorem.
 
 \subsection{Syntax}
 \label{sec:design-syntax}
 
-Figure~\ref{fig:syntax} presents the abstract syntax. A program is pragmas followed by declarations. Types include base types (now including \texttt{Principal} and \texttt{Path}), \texttt{Schema}, arrow types, \texttt{Policy}, and named references. Expressions add to standard imperative constructs the four primitives, \texttt{js} interop, \texttt{eval}, \texttt{enforce}, comparisons, and the principal introducers \texttt{root} and \texttt{restrict}\;$e$. The \texttt{as} clause on \texttt{gen}/\texttt{agent} takes an expression of type \texttt{Principal}; the legacy literal-string form is dropped in favor of named principals (\texttt{let user: Principal = restrict root}).
+\begin{sloppypar}
+Figure~\ref{fig:syntax} presents the abstract syntax. A program is pragmas followed by declarations. Types include base types (now including \texttt{Principal} and \texttt{Path}), \texttt{Schema}, arrow types, \texttt{Policy}, and named references. Expressions add to standard imperative constructs the four primitives, \texttt{js} interop, \texttt{eval}, \texttt{enforce}, comparisons, and the principal introducers \texttt{root} and \texttt{restrict}\;$e$. The \texttt{as} clause on \texttt{gen}/\allowbreak\texttt{agent} takes an expression of type \texttt{Principal}; the legacy literal-string form is dropped in favor of named principals (\texttt{let user: Principal = restrict root}).
+\end{sloppypar}
 
 \begin{figure}[t]
 \small
@@ -24,7 +26,8 @@ e & ::= & s \mid n \mid b \mid x & \textit{lits, vars} \\
   & \mid & \texttt{let}\; x {:} T = e \mid \texttt{var}\; x {:} T = e & \textit{bindings} \\
   & \mid & x = e \mid e_1 ;\; e_2 & \\
   & \mid & \texttt{if}\; (e)\; \{e\}\; [\texttt{else}\; \{e\}] & \textit{control} \\
-  & \mid & \texttt{while}\; (e)\; \{e\} \mid \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \\
+  & \mid & \texttt{while}\; (e)\; \{e\} & \\
+  & \mid & \texttt{for}\; x\; \texttt{in}\; e\; \{e\} & \\
   & \mid & \texttt{ask}\; s \mid \texttt{say}\; s & \textit{I/O} \\
   & \mid & \texttt{root} \mid \texttt{restrict}\; e & \textit{principals} \\
   & \mid & \texttt{gen}\; s\; [\texttt{as}\; e] & \textit{LLM calls} \\
@@ -32,27 +35,80 @@ e & ::= & s \mid n \mid b \mid x & \textit{lits, vars} \\
   & \mid & \texttt{js}\; c \mid \texttt{enforce}\; x & \\
   & \mid & \texttt{eval}\; e\;(e_1, \ldots, e_k) &
 \end{array}\]
-\caption{Abstract syntax of \hadl. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names. Arrow types are right-associative and curried: $T_1 \to T_2 \to T_3$ denotes $(T_1, T_2) \to T_3$ (an n-ary arrow). Arithmetic and comparison are delegated to \texttt{js} blocks. The \texttt{as} clause on \texttt{gen}/\texttt{agent} takes an expression of type \texttt{Principal}; \texttt{root} is the unrestricted built-in principal and \texttt{restrict}\;$e$ creates a fresh strictly-weaker child of an existing principal.}
+\caption{Abstract syntax of \pact. Metavariables $s$, $n$, $b$, $c$, $x$, $f$, $X$ range over string/number/boolean literals, JavaScript code, variable, workflow, and type names. Arrow types are right-associative and curried: $T_1 \to T_2 \to T_3$ denotes $(T_1, T_2) \to T_3$ (an n-ary arrow). Arithmetic and comparison are delegated to \texttt{js} blocks. The \texttt{as} clause on \texttt{gen}/\allowbreak\texttt{agent} takes an expression of type \texttt{Principal}; \texttt{root} is the unrestricted built-in principal and \texttt{restrict}\;$e$ creates a fresh strictly-weaker child of an existing principal.}
 \label{fig:syntax}
 \end{figure}
 
-\hadl's base types correspond to JavaScript types ($\texttt{String}{\to}\texttt{string}$, etc.), and all runtime values are represented as JSON. The type checker uses inference with subsumption. \texttt{gen} and \texttt{js} are oracular, requiring explicit annotations at binding sites. Three types play a special role in gradual validation: \texttt{Schema} is the \emph{type of types}, arrow types are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
+\begin{sloppypar}
+\pact's base types correspond to JavaScript types ($\texttt{String}{\to}\texttt{string}$, etc.), and all runtime values are represented as JSON. The type checker uses inference with subsumption. \texttt{gen} and \texttt{js} are oracular, requiring explicit annotations at binding sites. Three types play a special role in gradual validation: \texttt{Schema} is the \emph{type of types}, arrow types are the types of workflows, and \texttt{Policy} is the type of authorization rules. All three share the property that their concrete values are generated by the LLM at runtime.
+\end{sloppypar}
 
 \subsection{Gradual Validation}
 \label{sec:design-gradual}
 
-The three gradual-validation annotations (\texttt{Schema}, arrow types, \texttt{Policy}) share the same mechanism: static checking treats them as universally compatible (inspired by the unknown type in gradual typing~\cite{siek2006gradual}), and rather than inserting casts, \hadl re-invokes the type checker over downstream code when a concrete value materializes.
+The three gradual-validation annotations, namely \texttt{Schema},
+arrow types, and \texttt{Policy}, share the same mechanism. Static
+checking treats them as universally compatible, inspired by the unknown
+type in gradual typing~\cite{siek2006gradual}. Rather than inserting
+casts, \pact{} re-invokes the type checker over downstream code when a
+concrete value materializes.
 
-\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. The subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it to the corresponding \hadl{} type, registers it, and re-invokes the type checker over the remainder of the program; on failure (within \texttt{@retries}) the runtime feeds the type error back to the causal \texttt{gen}. See Appendix~\ref{app:gradual-detail} for the JSON-Schema mapping and re-checking discipline.
+The common pattern is that an LLM-produced artifact is first accepted
+only at an abstract type and is later forced when the program reaches a
+use site that depends on its concrete structure. At that point, \pact{}
+does not merely check the artifact in isolation. It re-checks the
+program region that depends on the artifact. If the check fails, the
+runtime records the violated constraint and retries the generator that
+produced the artifact. This makes the retry causal. A missing field in a
+generated schema retries the schema generator, not each later value
+generator that happens to expose the missing field. An ill-typed
+generated workflow retries the workflow generator, not the caller. A
+malformed generated policy retries the policy generator before the
+policy is installed.
 
-\paragraph{Gradual workflow generation.} A \texttt{gen} annotated with an arrow type instructs the LLM to produce a complete \hadl{} workflow as structured output. \texttt{eval} deserializes, validates, and executes this value within the current interpreter context. Hierarchical plan generation lets an outer workflow delegate sub-task planning to the LLM.
+Gradual validation is intentionally different from classical gradual
+typing. \pact{} does not insert casts at boundaries between typed and
+untyped code, and it does not claim the gradual guarantee. The unknown
+part is not an untyped program fragment written by the programmer, but
+an artifact produced by the LLM during execution. Validation therefore
+means staged re-checking of generated program structure, followed by a
+bounded feedback-driven retry when the structure is incompatible with
+the continuation.
 
-\paragraph{Gradual policy generation.} A \texttt{gen} annotated with \texttt{Policy} produces a Cedar policy as JSON. \texttt{enforce} is a separate expression that installs the policy --- separating generation from activation enables conditional or human-in-the-loop approval. Installation enforces a deny-all guard, action-type validation, and append-only merging, so restrictions accumulate monotonically. Scoped principal validation across \texttt{as} clauses is enforced at invocation time by the Cedar check in $\rulename{Oracle-Success}$. A failed compile triggers feedback-driven self-healing.
+\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. The subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it to the corresponding \pact{} type, registers it, and re-invokes the type checker over the remainder of the program; on failure (within \texttt{@retries}) the runtime feeds the type error back to the causal \texttt{gen}. See Appendix~\ref{app:gradual-detail} for the JSON-Schema mapping and re-checking discipline.
+
+\paragraph{Gradual workflow generation.} A \texttt{gen} annotated with an arrow type instructs the LLM to produce a complete \pact{} workflow as structured output. \texttt{eval} deserializes, validates, and executes this value within the current interpreter context. Hierarchical plan generation lets an outer workflow delegate sub-task planning to the LLM.
+
+\paragraph{Gradual policy generation.} A \texttt{gen} annotated with
+\texttt{Policy} produces a Cedar policy as JSON. \texttt{enforce} is a
+separate expression that installs the policy. Separating generation from
+activation lets a program generate a candidate policy, inspect it,
+branch on it, or route it through human approval before it affects later
+calls. Installation enforces a deny-all guard, action-type validation,
+and append-only merging, so restrictions accumulate monotonically.
+Principals are also monotone. \texttt{root} denotes the unrestricted
+principal, while \texttt{restrict}\;$e$ creates a fresh child principal
+whose authority is no greater than that of its parent. Scoped principal
+validation across \texttt{as} clauses is enforced at invocation time by
+the Cedar check in $\rulename{Oracle-Success}$. A failed policy compile
+or authorization check triggers feedback-driven self-healing.
 
 \subsection{Threat Model and Limitations}
 \label{sec:design-threat}
 
-\hadl{} trusts the programmer-authored text, the type checker, the runtime re-checker, and the Cedar decision procedure, and treats every LLM output as untrusted. The retry budget $\MRetry$ bounds how many untrusted attempts the runtime consumes per site. Validation rejects outputs that fail structural checks of the annotated type, and every \texttt{gen}/\texttt{agent} is Cedar-checked before the LLM is called; denial triggers retry. Four threat classes remain outside this model --- prompt injection, semantic misalignment of generated policies, \texttt{say}-based exfiltration, and host-side \texttt{js} effects --- expanded in \sect{app:threat}. Formal results are stated relative to an \emph{eventually-truthful} oracle (\defn{def:oracle-truthful}); an adversarial or permanently-lying oracle exhausts the budget and the configuration fails closed.
+\pact{} trusts the programmer-authored text, the type checker, the
+runtime re-checker, and the Cedar decision procedure, and treats every
+LLM output as untrusted. The retry budget $\MRetry$ bounds how many
+untrusted attempts the runtime consumes per site. Validation rejects
+outputs that fail structural checks of the annotated type, and every
+\texttt{gen}/\texttt{agent} is Cedar-checked before the LLM is called.
+A denial triggers retry. Four threat classes remain outside this model.
+These are prompt injection, semantic misalignment of generated policies,
+\texttt{say}-based exfiltration, and host-side \texttt{js} effects.
+They are expanded in \sect{app:threat}. Formal results are stated
+relative to an \emph{eventually-truthful} oracle
+(\defn{def:oracle-truthful}). An adversarial or permanently lying oracle
+exhausts the budget and the configuration fails closed.
 
 \label{sec:design-limitations}
 The type system is deliberately simple: monomorphic, with homogeneous arrays, declared-field record checking (no row polymorphism or width subtyping), no sum/union/intersection types, \texttt{Schema} as top during static checking, and oracular \texttt{js} blocks. Relaxing these is not required for gradual validation to be sound. \sect{app:limitations} enumerates each restriction.

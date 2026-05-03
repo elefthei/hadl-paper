@@ -46,24 +46,38 @@ Yue et al.~\cite{yue2026statictemplatesdynamicruntime} identify the
 tension between expressivity and verifiability as a central open
 problem in this space.
 
+The central failure mode is not merely that an LLM output may be
+malformed, but that a single malformed generated artifact can invalidate
+many future steps. If an LLM-generated schema omits a field used by
+$m$ downstream calls, a conventional assertion-based workflow may
+discover the same defect only after each dependent call has already
+spent tokens producing an unusable result. Likewise, if a generated
+workflow or policy is invalid, late failure forces the system either to
+abort the whole run or to retry from an imprecise downstream symptom.
+The right repair target is therefore the \emph{causal generator}: the
+gen call that produced the schema, workflow, or policy on which the
+future computation depends. This observation makes validation both a
+correctness mechanism and a cost-control mechanism.
+
 \input{figures/clinical_trial}
 
 Figure~\ref{fig:clinical-trial} illustrates the central idea.
 A single workflow generates both a schema and an authorization
-policy at runtime, and \hadl{} rechecks downstream code against
+policy at runtime, and \pact{} rechecks downstream code against
 both before any patient data is collected. When the generated
 schema is missing a field that later code needs (such as
-\texttt{visit.cost}), the runtime detects the mismatch at the
-schema level and retries the schema generation with the type error
-as feedback, repairing it once rather than discovering the problem
-separately at each of the downstream visit calls. Because the
-repair happens before any visit data is generated, no dependent
+\texttt{visit.cost}), the runtime detects the mismatch while checking
+the continuation of the schema-producing binding and retries the
+schema generation with the type error as feedback. The repair is
+therefore applied once at the source of the defect, rather than
+separately after each downstream visit generation has already consumed
+tokens. Because the repair happens before any visit data is generated, no dependent
 outputs are discarded and the workflow continues from where it
 left off.
 
 We present \sys{} (Programmatic Agent Controlled Types), a
 strongly typed imperative DSL for composing long running agentic
-workflows. \hadl{} provides four domain specific primitives
+workflows. \pact{} provides four domain specific primitives
 (\texttt{ask}, \texttt{say}, \texttt{gen}, \texttt{agent}) as first
 class typed expressions in an imperative language with mutable state,
 loops, and nested workflow composition. The type system supports three
@@ -72,17 +86,19 @@ that resolves to a concrete type once the LLM delivers one. Arrow types
 let a gen produce a complete workflow invoked via \texttt{eval}.
 \texttt{Policy} lets a gen produce a Cedar~\cite{cutler2024cedar}
 policy activated via \texttt{enforce} with append only merging.
-Crucially, when validation fails at any of these three sites, \hadl{}
+Crucially, when validation fails at any of these three sites, \pact{}
 self heals by retrying the causal generator with the violated constraint
-as feedback, rather than aborting the workflow. This bounded retry
-discipline is what makes \hadl{} suitable for long running tasks. A
-workflow that would otherwise crash on a structural mismatch midway
+as feedback, rather than aborting the workflow. This bounded retry discipline is what makes \pact{} suitable for
+long-running tasks. Larger workflows are more likely to encounter at
+least one structurally wrong LLM-produced artifact, so reliability
+depends on localizing and repairing such failures without discarding
+the rest of the run. A workflow that would otherwise crash on a structural mismatch midway
 through processing hundreds of records instead repairs the offending
 output and continues from where it left off, without discarding prior
 results or requiring human intervention.
 
 \textbf{Contributions.}
-(1)~We design \hadl{}, an imperative DSL in which
+(1)~We design \pact{}, an imperative DSL in which
 \texttt{ask}/\texttt{say}/\texttt{gen}/\texttt{agent} are first class
 typed expressions with per invocation Cedar authorization, implemented
 in Rust. Per step soundness is mechanized in Lean~4, sorry free and
@@ -97,7 +113,7 @@ to self heal rather than crash on structural mismatches.
 (3)~We demonstrate that gradual validation has measurable practical
 benefits beyond correctness. By catching structural mismatches at the
 earliest possible point in the workflow rather than after dependent
-outputs have been generated, \hadl{} reduces output token consumption
+outputs have been generated, \pact{} reduces output token consumption
 nearly threefold compared to assertion based baselines in our clinical
 trial evaluation (1{,}732 vs.\ 4{,}605 output tokens), while
 completing in roughly half the wall clock time.

@@ -1,31 +1,34 @@
 \section{Evaluation}
 \label{sec:evaluation}
 
-We evaluate \hadl on the clinical-trial workflow of Figure~\ref{fig:clinical-trial}.
-The goal is to test the two central mechanisms, gradual schema typing and per-invocation Cedar
-authorization, against baselines that must implement the same properties by hand.
+We evaluate \pact{} on the clinical-trial workflow of
+Figure~\ref{fig:clinical-trial}. The evaluation is a focused case study
+of gradual schema typing and per-invocation Cedar authorization. We
+compare \pact{} against baselines that must implement the same
+properties manually, and we measure whether early causal repair avoids
+repeated downstream failures.
 
-\subsection{Research Questions and Method}
-\label{sec:eval-rqs}
+We compare five systems, namely \pact{}, plain LangGraph, LangGraph
+with assertions, plain DSPy, and DSPy with assertions. Each system is
+run $K=3$ times on the same clinical-trial task, using a fixed scripted
+transcript and the same LLM backend. Each baseline receives the same
+prompt text as \pact{}, including the schema \texttt{gen} prompt, the
+policy \texttt{gen} prompt, the patient-ID prompt, and the same bare
+visit prompt for each generated patient visit. In particular, the visit
+prompt does not inject the generated schema. This setup isolates the
+effect of the workflow language. Either the system tracks and enforces
+the schema it generated, or it must recover manually after a bad
+downstream value has already been produced. 
 
-\textbf{RQ1 (schema validation):} Does the \texttt{crf} type annotation catch visit data that
-does not conform to the generated schema, and does the language prevent this from propagating?
-\textbf{RQ2 (authorization):} Does the Cedar policy block an unauthorized principal while allowing
-an authorized one to complete the workflow?
-\textbf{RQ3 (baselines):} How much code and manual enforcement is required to replicate the same
-safety properties in LangGraph and DSPy?
-
-We run all five systems $K=3$ times on the clinical-trial workflow driven by a fixed scripted
-transcript.
-\hadl and all baselines use the same LLM backend.
-Each baseline uses the identical prompt text as \hadl:
-the schema \texttt{gen} prompt, the policy \texttt{gen} prompt, the patient-ID prompt, and for
-each patient visit the same bare visit prompt \emph{without} injecting the schema.
-The two \emph{plain} baselines (LangGraph, DSPy) access \texttt{visit["cost"]} and
-\texttt{visit["patient\_id"]} directly with no validation or authorization.
-The two \emph{assertion} baselines (LangGraph+assertions, DSPy+assertions) add Pydantic
-field-presence checks and a manual \texttt{check\_authorization()} call at each call site,
-retrying with schema-injected prompts on failure.
+\begin{sloppypar}
+The two plain baselines access \texttt{visit["cost"]} and
+\texttt{visit["patient\_id"]} directly, with no validation
+and no authorization check at the call site. The assertion baselines add
+Pydantic field-presence checks and a developer-written
+\texttt{check\_authorization()} call at each LLM call site. When a field
+check fails, the assertion baseline retries the failed visit generation
+with the schema and error message manually injected into the prompt.
+\end{sloppypar}
 
 \subsection{Results}
 \label{sec:eval-results}
@@ -37,63 +40,145 @@ retrying with schema-injected prompts on failure.
 \toprule
 System & LoC & \checkmark & rt (s) & tok.\ i/o & q/c/m & rec. \\
 \midrule
-\sys              & 14  & \textcolor{OliveGreen}{\checkmark} & 37.7    & 2380/1732 & 7/3/0  & auto \\
-LangGraph         & 128 & \textcolor{BrickRed}{$\times$}     & 27.5$^*$ & 407/1760$^*$ & 4/0/3 & --- \\
+\sys              & 19  & \textcolor{OliveGreen}{\checkmark} & 37.7    & 2380/1732 & 7/3/0  & auto \\
+LangGraph         & 128 & \textcolor{BrickRed}{$\times$}     & 27.5$^*$ & 407/1760$^*$ & 4/0/3 & none \\
 \;+assertions     & 154 & \textcolor{OliveGreen}{\checkmark} & 81.2    & 1798/4605 & 10/9/0 & manual \\
-DSPy              & 102 & \textcolor{BrickRed}{$\times$}     & 34.1$^*$ & 359/2112$^*$ & 4/0/3 & --- \\
+DSPy              & 102 & \textcolor{BrickRed}{$\times$}     & 34.1$^*$ & 359/2112$^*$ & 4/0/3 & none \\
 \;+assertions     & 135 & \textcolor{OliveGreen}{\checkmark} & 80.8    & 1783/4573 & 10/9/0 & manual \\
 \bottomrule
 \end{tabular}
 \caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times.
-  \emph{LoC} counts non-empty, non-comment implementation lines;
-  \checkmark marks whether all three runs completed;
-  \emph{rt} is mean wall-clock runtime in seconds;
-  \emph{tok.\ i/o} is mean input/output tokens;
-  \emph{q/c/m} is mean LLM calls and total violations caught/missed across runs;
-  \emph{rec.} is recovery (\emph{auto}: language-enforced; \emph{manual}: developer-written; \emph{---}: none).
-  Plain baselines ($^*$) crashed at a field-access error; their figures cover only calls up to that point.}
+  \emph{LoC} counts non-empty, non-comment implementation lines.
+  \checkmark marks whether all three runs completed.
+  \emph{rt} is mean wall-clock runtime in seconds.
+  \emph{tok.\ i/o} is mean input/output tokens.
+  \emph{q/c/m} is mean LLM calls and total violations caught or missed across runs.
+  \emph{rec.} is recovery. \emph{auto} means language-enforced, \emph{manual} means developer-written, and \emph{none} means no recovery.
+  Plain baselines ($^*$) crashed at a field-access error, so their figures cover only calls up to that point.}
 \label{tab:eval-clinical}
 \end{table}
 
-\paragraph{Plain baselines fail.}
-LangGraph and DSPy without assertions fail on every run.
-The bare visit prompt \texttt{"Generate a visit for pid in trial"} produces a medically correct CRF
-record (fields such as \texttt{tender\_joint\_count} and \texttt{das28\_crp}) without a
-\texttt{cost} field, because no constraint communicated to the LLM that \texttt{cost} would be
-accessed later.
-The direct field access \texttt{visit["cost"]} raises a \texttt{KeyError} and the workflow crashes.
-Three missed violations per system ($K=3$ runs) reflect that the frameworks provide no mechanism
-to detect or prevent the omission.
+\paragraph{Plain baselines fail late.}
+LangGraph and DSPy without assertions fail on every run. The bare visit
+prompt \texttt{"Generate a visit for pid in trial"} produces a medically
+plausible CRF record with fields such as
+\texttt{tender\_joint\_count} and \texttt{das28\_crp}, but without a
+\texttt{cost} field. This happens because no constraint communicated to
+the LLM that \texttt{cost} would be accessed later. The direct field
+access \texttt{visit["cost"]} raises a \texttt{KeyError}, so the
+workflow crashes only after the invalid visit has already been
+generated. The three missed violations per system reflect that these
+frameworks provide no language-level mechanism to connect the generated
+schema with later field accesses.
 
-\paragraph{Pact completes with automated self-healing.}
-\hadl completed all three runs successfully.
-On each run, the initial \texttt{crf} schema generation omitted the \texttt{cost} field, a
-tracking field not surfaced by a bare clinical prompt.
-\hadl's field-access scanner detected that \texttt{visit.cost} is referenced in the
-for-loop body before any visit call is made, found \texttt{cost} absent from the generated schema,
-and automatically retried the schema generation with the type error as feedback.
-The healed schema included \texttt{cost} and all subsequent visit calls conformed on the first
-attempt.
-This self-healing event is counted once per run (\texttt{caught}$=3$ across $K=3$ runs,
-\texttt{missed}$=0$), detected and repaired structurally with no developer intervention.
-The \texttt{as "coordinator"} annotation fires Cedar unconditionally before each visit call and
-\texttt{as "safety\_board"} fires before the agent call.
-No authorization violation occurred because both principals are permitted by the generated policy.
+\paragraph{\pact{} repairs the causal artifact.}
+\pact{} completed all three runs. In each run, the initial
+\texttt{crf} schema generation omitted the \texttt{cost} field, a
+tracking field not implied by the bare clinical prompt. Before any visit
+data was generated, \pact{} scanned the continuation of the schema
+binding, found that \texttt{visit.cost} is referenced in the loop body,
+and detected that the generated schema did not provide that field. The
+runtime then retried the schema-producing \texttt{gen} with the type
+error as feedback. The repaired schema included \texttt{cost}, and all
+subsequent visit generations conformed on the first attempt.
 
-\paragraph{Assertion baselines succeed but at significant cost.}
-LangGraph+assertions and DSPy+assertions both complete but need 10 queries per run instead of 7
-(three extra retry calls, one per patient visit).
-On each first attempt the bare visit prompt omits \texttt{cost}. Pydantic catches the missing field
-(\texttt{caught}$=9$ across three runs), and the retry re-issues the call with the schema and error
-message injected manually.
-The additional queries more than double the runtime (81\,s vs.\ 38\,s) and increase output tokens
-nearly threefold (4605 vs.\ 1732) as the LLM re-generates each visit.
-Authorization is enforced by a \texttt{check\_authorization()} call written by the developer.
-Omitting it from any call site would silently bypass the check.
-The \hadl program that achieves the same guarantees is 14 lines while the assertion baselines require
-128--154 lines.
+This is the key difference from downstream assertion checking. \pact{}
+repairs the schema once at the source of the defect. It does not wait
+for each visit generation to fail independently. The self-healing event
+is therefore counted once per run, giving \texttt{caught}$=3$ and
+\texttt{missed}$=0$ across the three runs.
+
+\paragraph{\pact{} enforces authorization at each invocation.}
+The generated policy is installed with \texttt{enforce}. After
+installation, each \texttt{gen} and \texttt{agent} call is checked
+against Cedar under the principal carried by the call. In the successful
+\pact{} runs, the coordinator principal is permitted to generate visit
+data under the installed blinding policy, and the final reporting
+agent runs under the default principal. No authorization violation
+occurred in these runs. The
+important point is that the check is inserted by the language at every
+LLM invocation. In the assertion baselines, the same property depends on
+a developer-written \texttt{check\_authorization()} call at each site.
+
+To make this concrete, consider what happens when a \texttt{gen} 
+call is attempted under a principal that the installed policy does 
+not permit. The Gen-PolHeal rule fires before the LLM is called 
+at all. Cedar evaluates the request under the current principal, 
+produces a denial, and the runtime appends that denial as a 
+feedback event to the heal context. The generator is then retried 
+with the Cedar denial reason included in the prompt, giving the 
+LLM the opportunity to produce a value under a permitted 
+principal. In the clinical-trial workflow, the
+\texttt{coordinator} principal on line~6 of
+Figure~\ref{fig:clinical-trial} is used to scope the visit
+generation on line~13 via an explicit \texttt{as} clause; calls
+without such a clause run under the default principal. A developer
+who adds a new \texttt{gen} call to
+the workflow without specifying an explicit \texttt{as} clause 
+runs under the default principal, which is checked against the 
+installed policy before the LLM is ever contacted. The policy 
+violation surfaces immediately and deterministically, regardless 
+of what the LLM would have produced. In the assertion baselines, 
+the same guarantee depends on the developer remembering to add a 
+\texttt{check\_authorization()} call at the new site. Omitting it 
+produces no error and no warning. The workflow silently bypasses 
+the intended policy.
+
+\paragraph{Assertion baselines succeed with manual recovery.}
+LangGraph with assertions and DSPy with assertions complete all runs,
+but they need 10 LLM calls per run instead of 7. The additional calls
+are caused by late repair. Each of the three visit generations first
+omits \texttt{cost}, then fails the Pydantic check, then is retried with
+the schema and error message manually injected into the prompt. Across
+three runs, this gives \texttt{caught}$=9$ violations for the assertion
+baselines, compared with \texttt{caught}$=3$ for \pact{}. The higher
+count is not better behavior. It means the same schema defect is
+rediscovered separately at each dependent call.
+
+The extra retries more than double the runtime, from about 38 seconds
+for \pact{} to about 81 seconds for the assertion baselines, and
+increase output tokens from 1{,}732 to roughly 4{,}600. The assertion
+baselines also require substantially more code. LangGraph with
+assertions is 154 lines and DSPy with assertions is 135 lines, compared
+with 19 lines for the \pact{} workflow.
 
 \subsection{Threats to Validity}
 \label{sec:eval-threats}
 
-This is a focused case study, not a broad benchmark: one workflow, one model family. Schema-healing triggered on every run --- the bare clinical prompt consistently omitted \texttt{cost} and \hadl{} repaired it on first retry --- but reliability depends on context; the structural guarantee, not LLM behavior, is the claim. The authorization comparison is partly qualitative: assertion baselines \emph{can} be made correct manually, at the cost of 114--140 added lines, doubled runtime, and reliance on developer diligence.
+This evaluation is a focused case study rather than a broad benchmark.
+It uses one workflow, one model family, and three runs per system.
+Schema healing triggered on every \pact{} run because the bare clinical
+prompt consistently omitted \texttt{cost}, and \pact{} repaired the
+schema on the first retry. The claim is therefore not that the LLM will
+always repair every schema after one retry. The claim is that, when a
+structural defect is repairable, \pact{} localizes the repair to the
+causal generated artifact before dependent calls execute.
+
+The authorization comparison is partly qualitative. The assertion
+baselines can be made correct by careful developers, but the property is
+not enforced by the framework. Omitting a manual authorization check at
+one call site silently bypasses the intended policy. In \pact{}, the
+Cedar check is part of the semantics of \texttt{gen} and \texttt{agent}
+after policy installation.
+
+The authorization evaluation does not include a run in which a 
+genuine Cedar denial is triggered, because doing so would require 
+deliberately misconfiguring the principal structure in a way that 
+falls outside the scope of this case study. The formal coverage of that case is provided by the Gen-PolHeal 
+and Agent-PolHeal rules in Section~\ref{sec:sem-reduction} and 
+their mechanized counterparts in \texttt{Safety.lean}.
+
+The semantics defines five possible outcomes for any terminating run:
+\emph{success} (reduction reaches a value configuration); \emph{type
+rejection} (a non-healable \texttt{gen} produced an ill-typed value
+and fired \rulename{Gen-TypeErr}, or the budget exhausted and fired
+\rulename{Gen-Budget}); \emph{policy rejection} (\rulename{Gen-PolHeal}
+consumed the full budget); \emph{policy-install failure} (the deny-all
+guard or action-type check rejected an \texttt{enforce} policy after
+$\MRetry$ retries); or \emph{oracle stall} (every oracle response inside
+budget was ill-typed at a healable $\tau$, so no rule fired and the
+trace got stuck). In all three \pact{} runs reported here, the outcome
+was success. The schema heal that occurred on each run is part of the
+success path, not a separate outcome class. The remaining four outcome
+classes are possible in principle and are covered by the formal
+semantics, but did not arise under the conditions of this case study.

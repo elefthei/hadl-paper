@@ -1,10 +1,114 @@
 \section{Overview}
 \label{sec:overview}
 
-We introduce \hadl through two self-contained workflows. The clinical-trial workflow of Figure~\ref{fig:clinical-trial} covers gradual validation of types and policies. A second example covers workflow generation.
+We introduce \pact through two self-contained workflows. The 
+clinical-trial workflow of Figure~\ref{fig:clinical-trial} covers 
+gradual validation of types and policies. A second example, the 
+car-recommendation workflow of Figure~\ref{fig:overview-workflow}, 
+covers workflow generation. Together they illustrate all three 
+forms of gradual validation that \pact provides.
 
-\hadl programs consist of workflow declarations, typed functions that compose four domain-specific primitives with standard imperative constructs. \texttt{ask} prompts a human operator and returns a \texttt{String}. \texttt{say} prints a string and returns unit. \texttt{gen} sends a description to an LLM gen session configured to return structured data and requires an explicit type annotation at the binding site. \texttt{agent} sends an instruction to an LLM reasoning session. These are first-class expressions in the language, composing with \texttt{let}/\texttt{var} bindings, \texttt{if}, \texttt{while}, \texttt{for}, and inline JavaScript (\texttt{js}).
+\pact programs consist of workflow declarations, which are typed 
+functions that compose four domain-specific primitives with 
+standard imperative constructs. \texttt{ask} prompts a human 
+operator and returns a \texttt{String}. \texttt{say} prints a 
+string and returns unit. \texttt{gen} sends a description to an 
+LLM session configured to return structured data and requires an 
+explicit type annotation at the binding site. \texttt{agent} sends 
+an instruction to an LLM reasoning session. These are first-class 
+expressions in the language, composing with \texttt{let} and 
+\texttt{var} bindings, \texttt{if}, \texttt{while}, \texttt{for}, 
+and inline JavaScript (\texttt{js}).
 
-\paragraph{Types and policies (Figure~\ref{fig:clinical-trial}).} Line~5 binds \texttt{crf} with a \texttt{Schema} annotation: when the LLM delivers the schema the interpreter resolves it and re-checks the remainder of the program against the concrete shape. If any field accessed later (such as \texttt{visit.cost} or \texttt{visit.patient\_id} in the \texttt{for} loop) is absent from the generated schema, a forward syntactic field-access analysis over the let-gen continuation triggers a heal step (Appendix~\ref{app:aux-defs}): the runtime appends a missing-field error event and retries the same gen redex. The analysis is sound but over-approximate: a projection in a never-taken branch still forces the oracle to supply that field; refining to a path-sensitive analysis is future work. Lines~6--7 produce a blinding policy that line~8 activates via \texttt{enforce}, after which every \texttt{gen}/\texttt{agent} is authorized against the installed policy. The \texttt{for} loop on line~11 iterates patient IDs. Inside, \texttt{visit} is bound with the \texttt{crf} type annotation so every LLM output is validated against the concrete schema before the field accesses on lines~14--15 execute. Every \texttt{gen}/\texttt{agent} call is authorized against the installed policy under the principal carried in the AST (in this figure, implicit; the surface syntax also supports an explicit \texttt{as} clause for naming non-default principals). \texttt{@retries 3} on line~1 activates the feedback-driven self-healing budget (\sect{sec:design-gradual}): on any validation failure the runtime re-invokes the causal \texttt{gen} with the violated constraint appended to the original prompt.
+\paragraph{Types and policies (Figure~\ref{fig:clinical-trial}).}
+Line~5 binds \texttt{crf} with a \texttt{Schema} annotation. When 
+the LLM delivers the schema the interpreter resolves it and 
+re-checks the remainder of the program against the concrete shape. 
+If any field accessed later, such as \texttt{visit.cost} or 
+\texttt{visit.patient\_id} in the \texttt{for} loop, is absent 
+from the generated schema, a forward syntactic field-access 
+analysis over the let-gen continuation triggers a heal step 
+(Appendix~\ref{app:aux-defs}). The runtime then appends a 
+missing-field error event and retries the same gen redex. The 
+analysis is sound but over-approximate, meaning a projection in a 
+never-taken branch still forces the oracle to supply that field. 
+Refining to a path-sensitive analysis is future work. Line~6 introduces
+the \texttt{coordinator} principal via
+\texttt{restrict root}. Lines~7--8 produce a blinding policy that
+line~9 activates via
+\texttt{enforce}, after which every \texttt{gen} and \texttt{agent}
+call is authorized against the installed policy. The \texttt{for}
+loop on line~15 iterates patient IDs. Inside the loop,
+\texttt{visit} is bound with the \texttt{crf} type annotation so
+every LLM output is validated against the concrete schema before
+the field accesses on lines~16--17 execute. Every \texttt{gen} and
+\texttt{agent} call is authorized against the installed policy
+under the principal carried in the AST: the visit \texttt{gen} on
+line~13 runs under \texttt{coordinator} via an explicit
+\texttt{as} clause, while other LLM calls run under the default
+principal. 
+\texttt{@retries 3} on line~1 activates the feedback-driven 
+self-healing budget (\sect{sec:design-gradual}), so that on any 
+validation failure the runtime re-invokes the causal \texttt{gen} 
+with the violated constraint appended to the original prompt.
 
-\paragraph{Workflow generation.} Agentic workflows often delegate subtasks whose structure is itself the subject of the current reasoning step. \hadl makes workflows first-class: a \texttt{gen} annotated with a workflow type (e.g., a scorer \texttt{(car\_schema -> Number)} whose parameter type is a runtime-generated schema) instructs the LLM to produce a complete \hadl workflow as a JSON-serialized AST, and \texttt{eval} deserializes and invokes it in the caller's environment. At the \texttt{eval} site the type checker verifies argument and return types against the workflow type. An example (Figure~\ref{fig:overview-workflow}, in \sect{app:overview-example}) shows a car-recommendation outer workflow and the LLM-generated scorer that rates a car's comfort, cost, and safety and averages the three via \texttt{js}.
+\paragraph{Self-healing in detail.}
+It is worth tracing the self-healing episode in 
+Figure~\ref{fig:clinical-trial} step by step, because the causal 
+nature of the repair is what distinguishes \pact from 
+assertion-based approaches. When the schema \texttt{gen} on 
+line~5 returns, the runtime does not immediately proceed to 
+generate patient visits. Instead it performs a forward syntactic 
+analysis over the continuation of the schema-producing binding, 
+collecting every field projection that the bound variable 
+\texttt{crf} participates in downstream. In the clinical-trial 
+workflow this analysis finds \texttt{visit.cost} and 
+\texttt{visit.patient\_id} in the body of the \texttt{for} loop. 
+If the generated schema does not provide those fields, the runtime 
+constructs a feedback string describing the missing fields and 
+retries the schema \texttt{gen} before any visit data is collected 
+at all.
+
+This is the key difference from a workflow that checks fields only 
+at the point of use. In an assertion-based system, the missing 
+field is not discovered until a visit record is actually generated 
+and inspected. At that point the schema defect is repaired by 
+retrying the visit generator with the schema injected into its 
+prompt, but the same defect will be rediscovered independently for 
+every subsequent visit. If the workflow generates three patient 
+visits, the same structural error is caught three separate times, 
+and three separate retries consume tokens. \pact repairs the 
+schema once at the source, before any dependent generation has 
+run, and all subsequent visit generations conform on their first 
+attempt.
+
+\paragraph{Workflow generation (Figure~\ref{fig:overview-workflow}).}
+Agentic workflows often delegate subtasks whose structure is 
+itself the subject of the current reasoning step. \pact makes 
+workflows first-class by allowing a \texttt{gen} call to be 
+annotated with an arrow type. In the car-recommendation workflow 
+of Figure~\ref{fig:overview-workflow}(a), lines~3--4 generate a 
+schema describing a single car, and lines~5--6 ask the LLM to 
+produce a scorer with type \texttt{(car\_schema -> Number)}, where 
+the parameter type is itself a schema generated at runtime. The 
+LLM responds with a complete \pact workflow serialized as a JSON 
+AST. The \texttt{eval} call on line~13 deserializes that workflow 
+and executes it in the caller's environment. Before execution 
+begins, the type checker verifies that the argument supplied to 
+the scorer has the type \texttt{car\_schema} and that the workflow 
+promises to return a \texttt{Number}. A mismatch at either 
+position triggers the arrow-type heal rule, which retries the 
+workflow-generating \texttt{gen}, not the caller.
+
+The generated workflow appears in Figure~\ref{fig:overview-workflow}(b). 
+It takes a single car record, calls \texttt{gen} three times to 
+obtain numeric ratings for comfort, cost, and safety, and averages 
+them via a \texttt{js} expression. The outer workflow calls this 
+scorer three times inside a \texttt{while} loop, updating the 
+running best score and best car name on each iteration. The 
+important point is that the outer workflow never specifies how 
+scoring works. It only declares the type the scorer must satisfy. 
+The LLM fills in the scoring logic, and \pact enforces the 
+declared type contract at the point where that logic is first put 
+to use.
+\input{figures/car_scorer}

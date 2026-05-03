@@ -16,6 +16,8 @@
 \usepackage[true]{anonymous-acm} % For anonymous submission; change to 'false' for camera-ready
 \usetikzlibrary{shapes.geometric, shapes.multipart, arrows.meta, positioning, calc, backgrounds, patterns, decorations.pathreplacing}
 
+\hfuzz=70pt
+
 %%%%%%%%%%%%%% Comments
 \usepackage[]{comments} % add option 'hide' to hide all
 \Commenter{lef}
@@ -25,7 +27,7 @@
 %   [1] top-level constructs (workflow)         — black bold
 %   [2] expression-level keywords               — dark green bold
 %   [3] types / built-in schema names           — dark red bold
-\lstdefinelanguage{hadl}{
+\lstdefinelanguage{pact}{
   sensitive=true,
   alsoletter={0123456789},
   % Top-level (class 1): black bold
@@ -77,7 +79,7 @@
 
 %%%%%%%%%%%%% Custom terms
 \newcommand{\sys}{Pact\xspace}
-\newcommand{\hadl}{\sys}
+\newcommand{\pact}{\sys}
 \newcommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO:~#1]}}}
 
 %%%%%%%%%%%%% Theorem / judgment environments

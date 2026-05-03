@@ -1,4 +1,41 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-\hadl{} is a typed imperative DSL for long-running agentic workflows with \texttt{ask}/\texttt{say}/\texttt{gen}/\texttt{agent} as first-class typed expressions. Its central contribution, \emph{gradual validation}, unifies LLM generation of types (\texttt{Schema}), workflows (arrow types), and Cedar policies under a single re-checking-plus-bounded-retry discipline, with per-step soundness mechanized in Lean~4. Append-only merging with \texttt{forbid}-over-\texttt{permit} ensures generated policies only tighten access. Future work: trace-level termination, parallel \texttt{gen}, richer types, workflow imports.
+Agentic workflows are becoming programs. They branch, maintain 
+state, call tools, delegate subtasks, and increasingly generate 
+other workflows. \pact{} makes this observation explicit by 
+providing a typed imperative DSL in which \texttt{ask}, 
+\texttt{say}, \texttt{gen}, and \texttt{agent} are first-class 
+typed expressions rather than unstructured library calls. The 
+language is designed around the fact that LLMs do not merely 
+produce values. They can also produce program structure, including 
+schemas that govern future data, workflows that are later executed, 
+and policies that restrict subsequent operations.
+
+The central mechanism is \emph{gradual validation}. A generated 
+\texttt{Schema}, arrow-typed workflow, or \texttt{Policy} is 
+accepted only provisionally until it is put to use. At that point, 
+\pact{} re-checks the dependent program region under the same 
+typing and authorization discipline as programmer-written code. 
+When validation fails, the runtime retries the causal generator 
+with the violated constraint as feedback, rather than aborting the 
+workflow or repairing only a downstream symptom. This makes 
+validation serve three roles at once. It enforces structural 
+correctness of generated artifacts, it localizes recovery for 
+long-running workflows, and it avoids repeated dependent failures 
+that would otherwise waste tokens.
+
+\pact{} also integrates authorization into the workflow language 
+itself. Generated Cedar policies are activated explicitly through 
+\texttt{enforce}, installed append-only, and checked before every 
+\texttt{gen} and \texttt{agent} invocation under the current 
+principal. Thus generated workflows and generated policies remain 
+subject to language-level control rather than escaping into an 
+untyped orchestration layer. We formalized the resulting runtime 
+as a small-step semantics with staged materialization, fail-closed 
+behavior, and policy monotonicity, and mechanized the per-step 
+soundness argument in Lean~4. A Rust prototype and clinical-trial 
+case study show that the same mechanism can be implemented 
+directly and can reduce manual checking, runtime failures, and 
+repeated downstream retries compared with assertion-based 
+baselines.
