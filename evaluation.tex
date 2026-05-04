@@ -169,16 +169,10 @@ and Agent-PolHeal rules in Section~\ref{sec:sem-reduction} and
 their mechanized counterparts in \texttt{Safety.lean}.
 
 The semantics defines five possible outcomes for any terminating run:
-\emph{success} (reduction reaches a value configuration); \emph{type
-rejection} (a non-healable \texttt{gen} produced an ill-typed value
-and fired \rulename{Gen-TypeErr}, or the budget exhausted and fired
-\rulename{Gen-Budget}); \emph{policy rejection} (\rulename{Gen-PolHeal}
-consumed the full budget); \emph{policy-install failure} (the deny-all
-guard or action-type check rejected an \texttt{enforce} policy after
-$\MRetry$ retries); or \emph{oracle stall} (every oracle response inside
-budget was ill-typed at a healable $\tau$, so no rule fired and the
-trace got stuck). In all three \pact{} runs reported here, the outcome
-was success. The schema heal that occurred on each run is part of the
-success path, not a separate outcome class. The remaining four outcome
-classes are possible in principle and are covered by the formal
-semantics, but did not arise under the conditions of this case study.
+\begin{itemize}
+  \item \emph{success} (reduction reaches a value configuration),
+  \item \emph{type rejection} (a non-healable \texttt{gen} produced an ill-typed value and fired \rulename{Gen-TypeErr}, or the budget exhausted and fired \rulename{Gen-Budget}),
+  \item \emph{policy rejection} (\rulename{Gen-PolHeal} consumed the full budget),
+  \item \emph{policy-install failure} (the deny-all guard or action-type check rejected an \texttt{enforce} policy after $\MRetry$ retries), or
+  \item \emph{oracle stall} (every oracle response inside budget was ill-typed at a healable $\tau$, so no rule fired and the trace got stuck).
+\end{itemize}

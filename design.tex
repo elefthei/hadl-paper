@@ -75,7 +75,7 @@ means staged re-checking of generated program structure, followed by a
 bounded feedback-driven retry when the structure is incompatible with
 the continuation.
 
-\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. The subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it to the corresponding \pact{} type, registers it, and re-invokes the type checker over the remainder of the program; on failure (within \texttt{@retries}) the runtime feeds the type error back to the causal \texttt{gen}. See Appendix~\ref{app:gradual-detail} for the JSON-Schema mapping and re-checking discipline.
+\paragraph{Gradual type generation.} A \texttt{gen} annotated with \texttt{Schema} produces a JSON Schema at runtime. The subtyping relation treats \texttt{Schema} as universally compatible ($T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ for all $T$). When a schema materializes, the interpreter converts it to the corresponding \pact{} type, registers it, and re-invokes the type checker over the remainder of the program. On failure (within \texttt{@retries}) the runtime feeds the type error back to the causal \texttt{gen}. See Appendix~\ref{app:gradual-detail} for the JSON-Schema mapping and re-checking discipline.
 
 \paragraph{Gradual workflow generation.} A \texttt{gen} annotated with an arrow type instructs the LLM to produce a complete \pact{} workflow as structured output. \texttt{eval} deserializes, validates, and executes this value within the current interpreter context. Hierarchical plan generation lets an outer workflow delegate sub-task planning to the LLM.
 
