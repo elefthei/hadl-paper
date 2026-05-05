@@ -100,9 +100,11 @@ results or requiring human intervention.
 \textbf{Contributions.}
 (1)~We design \pact{}, an imperative DSL in which
 \texttt{ask}/\texttt{say}/\texttt{gen}/\texttt{agent} are first class
-typed expressions with per invocation Cedar authorization, implemented
-in Rust. Per step soundness is mechanized in Lean~4, sorry free and
-depending only on the standard meta axioms.
+typed expressions with two-tier Cedar authorization --- a static
+principal-declaration check at every \texttt{gen}/\texttt{agent} and
+a runtime file/directory monitor for the operations agents actually
+perform --- implemented in Rust. Per step soundness is mechanized in
+Lean~4, sorry free and depending only on the standard meta axioms.
 (2)~We introduce \emph{gradual validation}, a staged checking
 discipline in which types, workflows, and authorization policies
 produced by LLMs at runtime are checked against their declared types at

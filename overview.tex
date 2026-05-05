@@ -37,16 +37,17 @@ the \texttt{coordinator} principal via
 \texttt{restrict root}. Lines~7--8 produce a blinding policy that
 line~9 activates via
 \texttt{enforce}, after which every \texttt{gen} and \texttt{agent}
-call is authorized against the installed policy. The \texttt{for}
+call must declare a principal in $\mathrm{dom}(\MPol)$ and every
+file or directory operation the agent then performs is checked
+just-in-time by the runtime monitor (\sect{sec:implementation}). The
+\texttt{for}
 loop on line~15 iterates patient IDs. Inside the loop,
 \texttt{visit} is bound with the \texttt{crf} type annotation so
 every LLM output is validated against the concrete schema before
-the field accesses on lines~16--17 execute. Every \texttt{gen} and
-\texttt{agent} call is authorized against the installed policy
-under the principal carried in the AST: the visit \texttt{gen} on
-line~13 runs under \texttt{coordinator} via an explicit
-\texttt{as} clause, while other LLM calls run under the default
-principal. 
+the field accesses on lines~16--17 execute. The visit \texttt{gen} on
+line~13 declares principal \texttt{coordinator} via an explicit
+\texttt{as} clause; other LLM calls run under the default
+principal \texttt{root}. 
 \texttt{@retries 3} on line~1 activates the feedback-driven 
 self-healing budget (\sect{sec:design-gradual}), so that on any 
 validation failure the runtime re-invokes the causal \texttt{gen} 

@@ -48,13 +48,22 @@ typing judgment $\Gamma \vdash t : \tau \Rightarrow r$ with
 $r \in \{\mathsf{ok}, \mathsf{err}(\epsilon)\}$. After substitution, the
 runtime invokes the same type checker used statically on the remaining
 program; the proofs use only its $\mathsf{ok}$/$\mathsf{err}$ outcomes,
-not its internal algorithm. \emph{Policy authorization}
-$\PolAllow{\MPol}{\MPrin}{a}$ is the Cedar decision that principal
-$\MPrin$ is permitted to perform action $a \in \{\texttt{gen},
-\texttt{agent}\}$ at the current call site under the installed policy.
+not its internal algorithm. \emph{Static principal admissibility}
+$\PrinDeclared{\MPol}{\MPrin}$ holds when the principal $\MPrin$ named
+in an \texttt{as} clause is declared in the current policy state, and
+is the only authorization premise enforced statically at every
+\texttt{gen}/\texttt{agent} redex; if the redex omits an \texttt{as}
+clause, $\MPrin$ defaults to \texttt{root}, which is always declared.
+The action and resource of any specific access span the filesystem
+(\texttt{Read}/\texttt{Write}/\texttt{Exec} on files and directories)
+and are decided just-in-time by the runtime monitor of
+\sect{sec:implementation}, not at the redex. The runtime monitor sits
+outside the mechanized core: Lean verifies the static admissibility
+premise and the install discipline; the action/resource decision at
+each filesystem access is enforced by the prototype runtime only.
 \emph{Well-formedness} $\WF{C}$ requires both $|\MErr| \le \MRetry$ and
 that every store cell is well-typed:
-$\forall x,\tau,v.\; \MStore(x) = (\tau, v) \Rightarrow \StType{v}{\tau}$.
+$\forall~x,\tau,v.\; \MStore(x) = (\tau, v) \Rightarrow \StType{v}{\tau}$.
 
 \subsection{Reduction}
 \label{sec:sem-reduction}
@@ -73,7 +82,7 @@ $\Gen{\tau}{s}{\MPrin}$ reduces only as the immediate right-hand side of
 a $\texttt{let}$, so each materialization can validate the oracle
 response against its continuation before committing.
 
-We classify materialization targets by the predicate $\Healable{\tau}$,
+We classify self-healing opportunities by the predicate $\Healable{\tau}$,
 defined inductively: $\mathsf{true}$ on Schema, Policy, and arrow types,
 and on records or arrays containing a healable component;
 $\mathsf{false}$ on the base scalars Unit, Bool, Number, String.
@@ -94,8 +103,8 @@ case (Appendix~\ref{app:rules} lists all rules).
 
 Each healable $\tau$ is handled by the parametric pair
 $\rulename{Healable-Ok}$ and $\rulename{Healable-Heal}$, with
-$\rulename{Schema-Ok}$/$\rulename{Schema-Heal}$ and
-$\rulename{Arrow-Ok}$/$\rulename{Arrow-Heal}$ as the named Schema and
+$\rulename{Schema-Ok}$, $\rulename{Schema-Heal}$ and
+$\rulename{Arrow-Ok}$, $\rulename{Arrow-Heal}$ as the named Schema and
 Arrow specializations. Two further rules apply at gen sites: at
 non-healable $\tau$, $\rulename{Gen-TypeErr}$ steps an ill-typed
 response to the fail-closed sink $\errV$; at healable $\tau$,
@@ -107,7 +116,7 @@ retries when the principal is denied
 \figr{fig:rules-core} shows the Schema instance of the
 continuation-driven pattern. The arrow case is structurally identical
 with $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$; both are instances of
-$\rulename{Healable-Ok}$/$\rulename{Healable-Heal}$, which also covers
+$\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$, which also covers
 the Policy case ($\Healable{\Tpolicy} = \mathsf{true}$) and nested
 compound healable types such as $\Tarr{\Tschema}$ from the
 clinical-trial \texttt{Array[crf]} pattern (Appendix~\ref{app:rules}).
@@ -118,13 +127,13 @@ T2 (\sect{thm:pact-soundness}) guarantees that every committed value
 other than the distinguished fail-closed sink $\errV$ carries a runtime
 type --- $\errV$ is intentionally the only inhabitant lacking an
 $\StType{}{}$ derivation. The standalone $\Agent{s}{\MPrin}$ has its
-own pair $\rulename{Agent-Success}$/$\rulename{Agent-PolHeal}$:
+own pair $\rulename{Agent-Success}$, $\rulename{Agent-PolHeal}$:
 $\Agent{s}{\MPrin}$ materializes $\Tstring$, so it follows the
 non-healable path of returning a checked string on success and retrying
 on principal denial.
 
-\begin{figure}[t]
-\scriptsize
+\begin{figure*}[t]
+\small
 \begin{mathpar}
 \inferrule*[right=\rulename{Schema-Ok}]
   {\Oracle{s}{\MErr}{\Tschema} \ni v \\
@@ -141,21 +150,9 @@ on principal denial.
    |\MErr \cdot \ErrEv{\epsilon}| \le \MRetry}
   {\MConfig{\MErr}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}}}
 \end{mathpar}
-\caption{The continuation-driven self-heal pair, instantiated at $\tau =
-\Tschema$. Both rules require an authorized principal
-($\PolAllow{\MPol}{\MPrin}{\texttt{gen}}$) and a well-typed oracle
-response ($\StType{v}{\Tschema}$); they differ in whether the
-continuation $p$ type-checks under $\Gext{x}{\Tschema}$.
-$\rulename{Schema-Ok}$ flushes $\MErr$ and commits via $\Subst{p}{v}$
-(capture-avoiding substitution of $v$ for the bound variable $x$).
-$\rulename{Schema-Heal}$ appends the continuation's feedback $\epsilon$
-and retries the same redex within budget. The arrow case is identical
-with $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$. The parametric pair
-$\rulename{Healable-Ok}$/$\rulename{Healable-Heal}$ in
-Appendix~\ref{app:rules} covers all $\Healable{\tau}$, including Policy
-and nested compound healable types.}
+\caption{Continuation-driven self-heal at $\tau = \Tschema$. Both rules require a well-typed oracle response and an authorized principal; they branch on whether the continuation $p$ type-checks under $\Gext{x}{\Tschema}$. \rulename{Schema-Ok} commits via $\Subst{p}{v}$; \rulename{Schema-Heal} appends the typing-error feedback $\epsilon$ and retries. The Arrow analogue and the parametric \rulename{Healable-Ok}, \rulename{Healable-Heal} (covering $\Tpolicy$ and nested compounds like $\Tarr{\Tschema}$) appear in Appendix~\ref{app:rules}.}
 \label{fig:rules-core}
-\end{figure}
+\end{figure*}
 
 \begin{sloppypar}
 The pure-core rules ($\rulename{If-True/False}$, $\rulename{While}$,
@@ -202,12 +199,32 @@ response at \emph{some} heal context, not necessarily the caller's
 current $\MErr$.
 \end{sloppypar}
 
+\paragraph{What soundness means here.} The four claims below are one
+staged guarantee, parameterized by the configuration's heal context
+$\MErr$, policy state $\MPol$, and store $\MStore$. $\MErr$ is the
+per-site obligation cache: a successful materialization flushes it to
+$\emptyset$, so retries do not leak across sites; a heal step appends
+exactly one new feedback event, giving the next oracle attempt the
+precise reason the previous one failed. The retry budget $\MRetry$ caps
+the number of heal events before the configuration sinks to $\errV$ ---
+this is the operational meaning of \emph{fail-closed}, and it is the
+only way a non-value step can terminate without producing a well-typed
+result. The healable predicate $\Healable{\tau}$ is exactly the
+inductive class of types for which retry is admissible: base scalars
+commit immediately, while schemas, policies, arrows, and their
+recursive containers may re-enter the oracle loop until the
+continuation type-checks or the budget is spent. Together, T1 says the
+budget and store invariants survive every step, T2 says every committed
+non-sink value carries a runtime type, T3 says authority shrinks
+monotonically, and T4 says an oracle redex either commits, heals, or
+fails closed --- never gets stuck. All four are verified in Lean.
+
 \begin{theorem}[Soundness]
 \label{thm:pact-soundness}
-For any oracle $\mathcal{O}$ and any step $C \step C'$:
+For oracle $\mathcal{O}$ and step $C \step C'$:
 \begin{enumerate}
   \item[\textbf{T1}] (WF-preservation) $\WF{C} \Rightarrow \WF{C'}$.
-  \item[\textbf{T2}] (non-sink typeability) if $C' = \MConfigS{\MErr'}{\MPol'}{\MStore'}{v}$ with $\mathsf{isValue}(v)$ and $v \neq \errV$, then $\exists \tau.\ \StType{v}{\tau}$.
+  \item[\textbf{T2}] (non-sink typeability) if $C' = \MConfigS{\MErr'}{\MPol'}{\MStore'}{v}$ with $\mathsf{isValue}(v)$ and $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$.
   \item[\textbf{T3}] (policy monotonicity) $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
 \end{enumerate}
 \end{theorem}
@@ -226,12 +243,12 @@ surrounding $\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}$.
 $e = \Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}$,
 $\PolAllow{\MPol}{\MPrin}{\texttt{gen}}$, the oracle returns a
 well-typed Schema response at the current $\MErr$, and
-$\TJok{\Gext{x}{\Tschema}}{p}{\tau'}$, then $\exists C'.\ C \step C'$
+$\TJok{\Gext{x}{\Tschema}}{p}{\tau'}$, then $\exists~C'.\ C \step C'$
 via $\rulename{Schema-Ok}$.
 \textbf{T4c} (parametric progress for healable gen and agent): with the
 same authorization hypothesis, a direct oracle witness at the caller's
 $\MErr$, and the corresponding continuation-typing premise (for gen) or
-$\StType{v}{\Tstring}$ (for agent), $\exists C'.\ C \step C'$.\par}
+$\StType{v}{\Tstring}$ (for agent), $\exists~C'.\ C \step C'$.\par}
 \end{theorem}
 
 T4b and T4c are instances of the parametric Healable progress lemma;
@@ -252,61 +269,3 @@ rules or halt at the redex. The threat-model gaps of
 claims are the subject of \sect{sec:evaluation}.
 \end{sloppypar}
 
-\begin{figure}[t]
-\scriptsize
-\begin{mathpar}
-\inferrule*[right=\rulename{Schema-Ok}]
-  {\Oracle{s}{\MErr}{\Tschema} \ni v \\
-   \StType{v}{\Tschema} \\
-   \PolAllow{\MPol}{\MPrin}{\texttt{gen}} \\
-   \TJok{\Gext{x}{\Tschema}}{p}{\tau'}}
-  {\MConfig{\MErr}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}} \step \MConfig{\emptyset}{\MPol}{\Subst{p}{v}}}
-
-\inferrule*[right=\rulename{Schema-Heal}]
-  {\Oracle{s}{\MErr}{\Tschema} \ni v \\
-   \StType{v}{\Tschema} \\
-   \PolAllow{\MPol}{\MPrin}{\texttt{gen}} \\
-   \TJerr{\Gext{x}{\Tschema}}{p}{\tau'}{\epsilon} \\
-   |\MErr \cdot \ErrEv{\epsilon}| \le \MRetry}
-  {\MConfig{\MErr}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}}}
-\end{mathpar}
-\caption{Self-healing for the Schema materialization target. Both rules require a well-typed oracle response ($\StType{v}{\Tschema}$); they differ in whether the \emph{continuation} $p$ type-checks under $\Gext{x}{\Tschema}$. $\rulename{Schema-Ok}$ flushes the heal context to $\emptyset$ and commits; $\rulename{Schema-Heal}$ appends the continuation's feedback $\epsilon$ and retries the same redex. Under an eventually-truthful oracle, T4c witnesses that one of these two rules fires within $\MRetry+1$ heals; otherwise $\rulename{Gen-Budget}$ converts the over-budget configuration to the fail-closed sink $\errV$. The arrow (workflow) pair is structurally identical with $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$ (Appendix~\ref{app:rules}); the parametric pair $\rulename{Healable-Ok}$/$\rulename{Healable-Heal}$, given in the appendix, generalizes both pairs to any $\Healable{\tau}$ and additionally covers nested compound healable types such as $\Tarr{\Tschema}$ (clinical-trial \texttt{Array[crf]}) and $\Tpolicy$.}
-\label{fig:rules-core}
-\end{figure}
-
-\begin{sloppypar}
-The pure-core rules ($\rulename{If-True/False}$, $\rulename{While}$, $\rulename{For-Nil/Cons}$, $\rulename{Js}$, $\rulename{Seq}$, $\rulename{Ask}$, $\rulename{Say}$, $\rulename{Enforce-Install}$) form a standard CBV relation; $\rulename{For-Cons}$ uses substitution to bind the iteration variable. $\rulename{Enforce-Install}$ acts on a policy value at the head; the install operation rejects blanket $\texttt{forbid}$ under a deny-all guard, rejects unknown action types, and merges rules append-only. Allow-set shrinkage ($\Allow{\MPol'} \subseteq \Allow{\MPol}$) is an algebraic consequence of install, mechanized as $\mathtt{policyInstall\_shrinks}$.
-\end{sloppypar}
-
-\subsection{Correctness}
-\label{sec:sem-correctness}
-
-Because types are runtime values, policies evolve dynamically, and heal steps deliberately visit ill-typed configurations, classical progress-and-preservation refines into a four-component bundle: three per-step \emph{Soundness} clauses (well-formedness, typeable-value, policy monotonicity) plus oracle-conditional \emph{Progress} for oracle redexes, with \emph{Termination} argued at the trace level on paper.
-
-\begin{definition}[Eventually-truthful oracle]
-\label{def:oracle-truthful}
-An oracle $\mathcal{O}$ is \emph{eventually-truthful at budget $\MRetry$} for a site $(s,\tau)$ under an authorization predicate $A : V \to \mathrm{Prop}$ if there exists a heal context $\MErr$ with $|\MErr| \le \MRetry$ and a value $v$ satisfying $\Oracle{s}{\MErr}{\tau} \ni v$, $\StType{v}{\tau}$, and $A(v)$. We instantiate $A(v) \equiv \top$ in the soundness theorems below; $A$ lets callers (e.g., agent sites) rule out self-contradictory responses without weakening the progress lemma.
-\end{definition}
-
-\begin{sloppypar}
-This matches the existential shape of the Lean predicate $\mathtt{Oracle.eventuallyTruthful}$: it witnesses some well-typed response at \emph{some} heal context, not the caller's current $\MErr$.
-\end{sloppypar}
-
-\begin{theorem}[Soundness]
-\label{thm:pact-soundness}
-For any oracle $\mathcal{O}$ and any step $C \step C'$:
-(\textbf{T1}, WF-preservation) $\WF{C} \Rightarrow \WF{C'}$; (\textbf{T2}, staged materialization) if $C' = \MConfigS{\MErr'}{\MPol'}{\MStore'}{v}$ with $\mathsf{isValue}(v)$ and $v \neq \errV$, then $\exists \tau.\ \StType{v}{\tau}$; (\textbf{T3}, policy monotonicity) $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
-\end{theorem}
-
-T2 is conditional on $v \neq \errV$ because $\errV$ is the fail-closed sink produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ (Appendix~\ref{app:soundness} expands this).
-
-\begin{theorem}[Progress for oracle redexes]
-\label{thm:pact-progress}
-{\sloppy Let $C = \MConfigS{\MErr}{\MPol}{\MStore}{e}$ with $\WF{C}$. \textbf{T4a} (no heal past budget for standalone gen): if $e = \Gen{\tau}{s}{\MPrin}$ and $|\MErr| > \MRetry$, then $C$ has no successor at all (standalone $\Gen{\tau}{s}{\MPrin}$ is not a redex). \textbf{T4b} (truthful success at Schema): if $e = \Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{x}$, $\MPrin \in \mathrm{dom}(\MPol)$, and $\mathcal{O}$ is eventually-truthful at $(s,\Tschema)$, then $\exists C'.\ C \step C'$ via $\rulename{Schema-Ok}$. \textbf{T4c} (progress-gen-Schema, progress-agent): with the same principal-membership hypothesis and a direct oracle witness at the caller's $\MErr$, $\exists C'.\ C \step C'$.\par}
-\end{theorem}
-
-T4b/T4c cover Schema, arrow, and Policy targets via 1-line corollaries of the parametric Healable lemma; commentary and the trace-level termination argument are in Appendix~\ref{app:soundness} and \ref{app:term}.
-
-\begin{sloppypar}
-\noindent\textbf{Scope.} T1--T4c are mechanized in Lean~4 (\texttt{mechanization/Pact/}), sorry-free and depending only on the standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$ (build-time guard: \texttt{AxiomCheck.lean}). Trace-level termination is prose-only. Progress is conditional on an eventually-truthful oracle; under that assumption T4c witnesses that $\rulename{Healable-Ok}$ fires within $\MRetry+1$ heals at every healable site. The threat-model gaps of \sect{sec:design-threat} are outside the scope of soundness; practical claims are the subject of \sect{sec:evaluation}.
-\end{sloppypar}

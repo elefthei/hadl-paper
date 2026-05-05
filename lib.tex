@@ -180,7 +180,17 @@
 \newcommand{\Prov}{\mathsf{prov}}
 \newcommand{\Allow}[1]{\mathsf{allow}(#1)}
 \newcommand{\Install}[2]{\mathsf{install}(#1,\,#2)}
-\newcommand{\PolAllow}[3]{\mathsf{allows}(#1,\,#2,\,#3)}
+% Static policy premise: principal must be declared in current policy state.
+% Action argument retained for backwards compatibility with existing rule
+% sites; it is intentionally ignored by the macro because the abstract
+% semantics enforces only principal-membership statically. The action and
+% resource of any specific access are checked at runtime by the policy
+% monitor (see Section~\ref{sec:implementation}).
+\newcommand{\PrinDeclared}[2]{#2 \in \mathrm{dom}(#1)}
+\newcommand{\PolAllow}[3]{\PrinDeclared{#1}{#2}}
+% Install discipline at \enforce: every rule in the candidate policy is
+% forbid-effect, and no forbid rule targets root.
+\newcommand{\InstallOk}[1]{\mathsf{forbidOnly}(#1) \wedge \mathsf{rootSafe}(#1)}
 
 %%%%%%%%%%%%% Pact formal model — rule-name shortcut
 \newcommand{\rulename}[1]{\textsc{#1}}

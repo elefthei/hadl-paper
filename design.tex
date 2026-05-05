@@ -57,14 +57,31 @@ the continuation.
 separate expression that installs the policy. Separating generation from
 activation lets a program generate a candidate policy, inspect it,
 branch on it, or route it through human approval before it affects later
-calls. Installation enforces a deny-all guard, action-type validation,
-and append-only merging, so restrictions accumulate monotonically.
-Principals are also monotone. \texttt{root} denotes the unrestricted
-principal, while \texttt{restrict}\;$e$ creates a fresh child principal
-whose authority is no greater than that of its parent. Scoped principal
-validation across \texttt{as} clauses is enforced at invocation time by
-the Cedar check in $\rulename{Oracle-Success}$. A failed policy compile
-or authorization check triggers feedback-driven self-healing.
+calls. A failed policy compile or authorization check triggers
+feedback-driven self-healing.
+
+\paragraph{Cedar policies in \pact{}.} Cedar requests in \pact{} are
+\texttt{(principal, action, resource)} triples with $\texttt{Action}\in
+\{\texttt{Read},\texttt{Write},\texttt{Exec}\}$ and \texttt{Resource}
+ranging over files and directories the agent ultimately touches;
+wildcards \texttt{*} are supported in either slot. Principals form a
+tree rooted at the unforbiddable principal \texttt{root}; the policy
+state begins as $\MPol_0 = \texttt{allow(root,\;*,\;*)}$. The form
+$\texttt{let}\;b = \texttt{restrict}\;a$ declares $b$ as a fresh
+descendant of $a$, inheriting all of $a$'s allowances by Cedar's
+hierarchy semantics. \texttt{enforce} admits only candidate policies in
+which (i) every rule is forbid-effect and (ii) no rule targets
+\texttt{root}; together these admit only further restriction of
+descendants from their inherited authority while leaving \texttt{root}
+permanently maximal.
+
+The static premise enforced at every \texttt{gen}/\texttt{agent} redex
+is exactly $\PrinDeclared{\MPol}{\MPrin}$: the principal named in the
+\texttt{as} clause, or \texttt{root} when none is given, is declared in
+the current policy state. The action and resource of any specific
+filesystem access become known only when the agent runs, so they are
+checked just-in-time by the runtime monitor of
+\sect{sec:implementation}.
 
 \subsection{Threat Model and Limitations}
 \label{sec:design-threat}
@@ -73,9 +90,23 @@ or authorization check triggers feedback-driven self-healing.
 runtime re-checker, and the Cedar decision procedure, and treats every
 LLM output as untrusted. The retry budget $\MRetry$ bounds how many
 untrusted attempts the runtime consumes per site. Validation rejects
-outputs that fail structural checks of the annotated type, and every
-\texttt{gen}/\texttt{agent} is Cedar-checked before the LLM is called.
-A denial triggers retry. Four threat classes remain outside this model.
+outputs that fail structural checks of the annotated type. Every
+\texttt{gen}/\texttt{agent} carries the static premise
+$\PrinDeclared{\MPol}{\MPrin}$ before the LLM is called, and every
+filesystem access the agent then performs is policy-checked
+just-in-time by the runtime monitor (\sect{sec:implementation}). A
+denial at either layer triggers retry.
+
+\paragraph{Authority is monotone in the deny direction.} Because
+\texttt{enforce} installs only forbid-effect rules on non-root
+principals (\sect{sec:design-gradual}), the allow-set
+$\{(\MPrin, a, r) \mid \mathsf{allows}(\MPol, \MPrin, a, r)\}$
+monotonically shrinks across every step. Generated policies can
+therefore only restrict authority of declared descendants, never
+expand it; this rules out privilege escalation through LLM-authored
+policies as a class.
+
+Four threat classes remain outside this model.
 These are prompt injection, semantic misalignment of generated policies,
 \texttt{say}-based exfiltration, and host-side \texttt{js} effects.
 They are expanded in \sect{app:threat}. Formal results are stated

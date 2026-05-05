@@ -1,19 +1,19 @@
 \begin{figure*}[t]
 \centering
-\begin{subfigure}[c]{0.54\linewidth}
+\begin{subfigure}[c]{0.50\linewidth}
 \begin{lstlisting}[language=pact,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
 workflow pick_car() -> String {
   let prefs = ask "What matters most to you?"
   let car_schema: Schema = gen "Generate a
     schema for a car with a name and a type."
-  let scorer: (car_schema -> Number) = gen "Create
-    a workflow that scores a car based on `prefs`."
+  let scorer: (car_schema -> Number) =
+    gen "Create a car scoring workflow based on `prefs`."
   var best: String = ""
   var top: Number = 0
   var i: Number = 0
   while (i < 3) {
-    let car: car_schema = gen "Fill the schema
-      with a popular car matching `prefs`."
+    let car: car_schema =
+      gen "Come up with a popular car matching `prefs`."
     let score: Number = eval scorer(car)
     if (score > top) {
       top = score
@@ -28,16 +28,16 @@ workflow pick_car() -> String {
 \end{lstlisting}
 \subcaption{Outer workflow.}
 \end{subfigure}%
-\begin{minipage}[c]{0.08\linewidth}
+\begin{minipage}[c]{0.20\linewidth}
 \centering
 \begin{tikzpicture}[>=Stealth]
-  \draw[->, very thick] (0,0.25) -- (0.7,0.25)
-    node[midway, above, font=\tiny] {generated};
-  \draw[<-, very thick] (0,-0.25) -- (0.7,-0.25)
-    node[midway, below, font=\tiny] {runs here};
+  \draw[->, very thick] (0,0.3) -- (1.6,0.3)
+    node[midway, above, font=\footnotesize] {Generated};
+  \draw[<-, very thick] (0,-0.3) -- (1.6,-0.3)
+    node[midway, below, font=\footnotesize] {called in};
 \end{tikzpicture}
 \end{minipage}%
-\begin{subfigure}[c]{0.37\linewidth}
+\begin{subfigure}[c]{0.28\linewidth}
 \begin{lstlisting}[language=pact,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
 // produced by the gen
 // call on line 5 above

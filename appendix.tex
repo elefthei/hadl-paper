@@ -5,10 +5,10 @@
 
 \paragraph{Trust boundaries.} \pact treats the programmer-authored program text, the static type checker, the runtime re-checker, and the installed Cedar decision procedure as trusted. It treats every LLM output, whether a value, a schema, a workflow AST, or a policy, as untrusted. The retry budget $\MRetry$ declared by \texttt{@retries} is a bound on how many untrusted attempts the runtime will consume before failing closed on a given generation site.
 
-\paragraph{What is caught.} Validation rejects an LLM output that fails the structural checks of the annotated type: a schema whose $\sigma$-image is not representable, a workflow AST that fails to type-check at its use site, a policy that triggers the deny-all guard or references an unknown action type. Every \texttt{gen} and \texttt{agent} invocation is checked against the installed policy before the LLM is called, under the explicit principal named by the surrounding \texttt{as} clause; a denial at this check becomes an $\ErrEv{\cdot}$ event and triggers retry. Append-only merging guarantees that no \texttt{enforce} step can relax an already-installed restriction.
+\paragraph{What is caught.} Validation rejects an LLM output that fails the structural checks of the annotated type: a schema whose $\sigma$-image is not representable, a workflow AST that fails to type-check at its use site, or a generated Cedar policy that fails the install discipline (effect must be \texttt{forbid} for every rule, and no rule may target \texttt{root}). Every \texttt{gen} and \texttt{agent} invocation carries the static premise $\PrinDeclared{\MPol}{\MPrin}$ --- the principal named by the surrounding \texttt{as} clause (or $\texttt{root}$ by default) is declared in the current policy state. The action and resource of any specific filesystem access are checked just-in-time by the runtime monitor of \sect{sec:implementation}; a deny becomes an $\ErrEv{\cdot}$ event and triggers retry. The two install premises together guarantee that no \texttt{enforce} step can relax an already-installed restriction or revoke \texttt{root}'s authority.
 
 \begin{sloppypar}
-\paragraph{What is not caught.} Cedar authorizes at the granularity of a \texttt{(principal, action, resource)} triplet where the action is drawn from the fixed set $\{\texttt{gen},\texttt{agent}\}$ and the resource is the call site. It does not model the downstream side effects of an authorized \texttt{agent} call, the contents of its prompt, or the data returned by the LLM. Four categories of threat are therefore outside the current enforcement model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen} call whose prompt is composed with untrusted \texttt{ask} input can still be steered by an adversary who controls the user. Second, \emph{semantic misalignment} of generated policies: the deny-all guard and action-type check filter out policies that are syntactically pathological, but an LLM-generated policy that is merely \emph{over-permissive} with respect to operator intent will install and appear well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an already-authorized workflow emits sensitive values to the human. Fourth, \emph{side-effecting js blocks}, which execute arbitrary JavaScript under the host runtime's ambient authority. These gaps are out of scope for gradual validation as we define it; the append-only discipline prevents policy relaxation but cannot recover from a malicious or inappropriate \emph{initial} policy.
+\paragraph{What is not caught.} The runtime monitor's Cedar requests use \texttt{Action} $\in \{\texttt{Read}, \texttt{Write}, \texttt{Exec}\}$ and \texttt{Resource} ranging over files and directories the agent actually touches; wildcards \texttt{*} are supported. Authorization decisions therefore depend on which file an agent ultimately reads or writes, not on the call site of the \texttt{gen}/\texttt{agent} expression. Four categories of threat remain outside the model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen} call whose prompt is composed with untrusted \texttt{ask} input can still be steered by an adversary who controls the user, even though every actual filesystem access is policy-checked. Second, \emph{semantic misalignment} of generated policies: the install discipline filters out rules that are syntactically out of bounds, but an LLM-generated policy that is merely \emph{over-permissive} with respect to operator intent will install and appear well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an already-authorized workflow emits sensitive values to the human. Fourth, \emph{side-effecting js blocks}, which execute arbitrary JavaScript under the host runtime's ambient authority. These gaps are out of scope for gradual validation as we define it; the install discipline prevents policy relaxation but cannot recover from a malicious or inappropriate \emph{initial} policy.
 \end{sloppypar}
 
 \section{Type-System Limitations}
@@ -64,17 +64,17 @@ healable component --- happens \emph{only} inside a
 $\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}$ redex; every transition involving
 $\Gen{\tau}{s}{\MPrin}$ fires under such a wrapping let. Two auxiliary
 judgments classify the rules below. The predicate $\Healable{\tau}$
-selects materialization targets:
+selects self-healing opportunities:
 \begin{align*}
 \Healable{\Tschema} &= \mathsf{true} \\
 \Healable{\Tpolicy} &= \mathsf{true} \\
 \Healable{\Tarrow{T_1}{T_2}} &= \mathsf{true} \\
-\Healable{\Trec{\overline{x_i{:}T_i}}} &= \exists i.\,\Healable{T_i} \\
+\Healable{\Trec{\overline{x_i{:}T_i}}} &= \exists~i.\,\Healable{T_i} \\
 \Healable{\Tarr{T}} &= \Healable{T} \\
 \Healable{\Tunit} = \Healable{\Tbool} &= \mathsf{false} \\
 \Healable{\Tnum} = \Healable{\Tstring} &= \mathsf{false}
 \end{align*}
-A record or array containing a healable component is itself healable, since the nested materialization site participates in self-healing. The runtime type-check is the single-valued judgment $\Gamma \vdash t : \tau \Rightarrow r$ with $r \in \{\mathsf{ok}, \mathsf{err}(\epsilon)\}$: for closed values $t = v$ the context is $\emptyset$ (runtime re-check of an oracle response), and for continuations $t = p$ it is $\Gext{x}{\tau}$ (the check that drives self-heal). $\TJerr{\Gext{x}{\tau}}{p}{\tau'}{\epsilon}$ returns the typing error string $\epsilon$ that self-healing feeds back to the oracle. We write $\StType{v}{\tau}$ for the ok-branch on closed values (used in rules where $\epsilon$ is not consumed). The Cedar judgment $\PolAllow{\MPol}{\MPrin}{a}$ holds when principal $\MPrin$ is permitted to perform action $a \in \{\texttt{gen}, \texttt{agent}\}$ under the installed policy $\MPol$; success rules carry it as a premise, while $\rulename{Gen-PolHeal}$/$\rulename{Agent-PolHeal}$ fire on its negation.
+A record or array containing a healable component is itself healable, since the nested materialization site participates in self-healing. The runtime type-check is the single-valued judgment $\Gamma \vdash t : \tau \Rightarrow r$ with $r \in \{\mathsf{ok}, \mathsf{err}(\epsilon)\}$: for closed values $t = v$ the context is $\emptyset$ (runtime re-check of an oracle response), and for continuations $t = p$ it is $\Gext{x}{\tau}$ (the check that drives self-heal). $\TJerr{\Gext{x}{\tau}}{p}{\tau'}{\epsilon}$ returns the typing error string $\epsilon$ that self-healing feeds back to the oracle. We write $\StType{v}{\tau}$ for the ok-branch on closed values (used in rules where $\epsilon$ is not consumed). The static authorization premise $\PrinDeclared{\MPol}{\MPrin}$ holds when the principal $\MPrin$ named at the redex is declared in $\MPol$; success rules carry it as a premise, $\rulename{Gen-PolHeal}$ and $\rulename{Agent-PolHeal}$ fire on its negation, and a redex with no explicit \texttt{as} clause has $\MPrin = \texttt{root}$ inserted by elaboration.
 
 \begin{figure*}[t]
 \small
@@ -156,7 +156,7 @@ A record or array containing a healable component is itself healable, since the 
   {\MConfig{\MErr}{\MPol}{\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}}}
 
 \inferrule*[right=\rulename{Enforce-Install}]
-  {\Install{\MPol}{p} = \MPol'}
+  {\InstallOk{p} \\ \Install{\MPol}{p} = \MPol'}
   {\MConfig{\MErr}{\MPol}{\Enforce{p}} \step \MConfig{\MErr}{\MPol'}{\Tunit}}
 
 \inferrule*[right=\rulename{Agent-Success}]
@@ -171,7 +171,7 @@ A record or array containing a healable component is itself healable, since the 
    |\MErr \cdot \ErrEv{\epsilon}| \le \MRetry}
   {\MConfig{\MErr}{\MPol}{\Agent{s}{\MPrin}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Agent{s}{\MPrin}}}
 \end{mathpar}
-\caption{Reduction rules for \texttt{gen} and \texttt{agent}. Non-healable types use $\rulename{Gen-Ok}$/$\rulename{Gen-TypeErr}$; healable types use the Ok/Heal pairs (Schema, Arrow, and parametric $\rulename{Healable-Ok}$/$\rulename{Healable-Heal}$). $\rulename{Gen-Budget}$ sinks to $\errV$ when the heal budget is exhausted at a healable $\tau$; $\rulename{Gen-PolHeal}$/$\rulename{Agent-PolHeal}$ retry on principal mismatch.}
+\caption{Reduction rules for \texttt{gen} and \texttt{agent}. Non-healable types use $\rulename{Gen-Ok}$, $\rulename{Gen-TypeErr}$; healable types use the Ok/Heal pairs (Schema, Arrow, and parametric $\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$). $\rulename{Gen-Budget}$ sinks to $\errV$ when the heal budget is exhausted at a healable $\tau$; $\rulename{Gen-PolHeal}$, $\rulename{Agent-PolHeal}$ retry on principal mismatch.}
 \label{fig:rules-gen}
 \end{figure*}
 
@@ -185,10 +185,10 @@ sink. (ii) The all-$\tau$ rule $\rulename{Gen-PolHeal}$ retries on
 principal denial ($\lnot\PolAllow{\MPol}{\MPrin}{\texttt{gen}}$) within
 budget, appending the Cedar-supplied $\epsilon$. (iii) The
 continuation-driven self-heal pairs --- the parametric pair
-$\rulename{Healable-Ok}$/\allowbreak$\rulename{Healable-Heal}$ at any
+$\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$ at any
 $\Healable{\tau}$, with named Schema and Arrow specializations
-($\rulename{Schema-Ok}$/\allowbreak$\rulename{Schema-Heal}$,
-$\rulename{Arrow-Ok}$/\allowbreak$\rulename{Arrow-Heal}$) and the same
+($\rulename{Schema-Ok}$, $\rulename{Schema-Heal}$,
+$\rulename{Arrow-Ok}$, $\rulename{Arrow-Heal}$) and the same
 parametric form covering the Policy case and nested compound healable
 types such as $\Tarr{\Tschema}$ from the clinical-trial
 \texttt{Array[crf]} pattern --- together with $\rulename{Gen-Budget}$
@@ -221,9 +221,11 @@ names its operator directly in the conclusion, so no separate action
 tag appears in the reduction state. The budget is measured by
 $|\MErr|$: every entry is an $\ErrEv{\cdot}$, and a successful oracle
 step flushes $\MErr$ to $\emptyset$, so the count resets to zero
-naturally. $\Install{\MPol}{p}$ bundles the deny-all guard, action-type
-validation, and append-only merge; $\mathtt{policyInstall\_shrinks}$
-guarantees $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
+naturally. The premise $\InstallOk{p}$ holds when every rule of $p$ has
+effect \texttt{forbid} and no rule targets \texttt{root};
+$\Install{\MPol}{p}$ then merges $p$ with $\MPol$ and
+$\mathtt{policyInstall\_shrinks}$ guarantees
+$\Allow{\MPol'} \subseteq \Allow{\MPol}$.
 \end{sloppypar}
 
 \subsection{Pure Core (L1)}
@@ -281,7 +283,7 @@ guarantees $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
   {\MConfig{\MErr}{\MPol}{\Say{s}} \step \MConfig{\MErr}{\MPol}{\Tunit}}
 
 \inferrule*[right=\rulename{Eval-Success}]
-  {|\overline{v_i}| = n \\ \forall i.\ \mathsf{isValue}(v_i)}
+  {|\overline{v_i}| = n \\ \forall~i.\ \mathsf{isValue}(v_i)}
   {\MConfig{\MErr}{\MPol}{\Eval{(\Clos{\overline{x_i}}{e_b})}{\overline{v_i}}} \step \MConfig{\MErr}{\MPol}{e_b[\overline{v_i/x_i}]}}
 \end{mathpar}
 \caption{Human I/O and closure application: \texttt{ask}/\texttt{say} and the simultaneous-substitution rule for $n$-ary closures.}
@@ -314,7 +316,7 @@ $\rulename{Eval-Success}$ applies a closure $\Clos{\overline{x_i}}{e_b}$ to a li
 
 \inferrule*[right=\rulename{Eval-Arg-Cong}]
   {\mathsf{isValue}(f) \\
-   \forall j < k.\ \mathsf{isValue}(e_j) \\
+   \forall~j < k.\ \mathsf{isValue}(e_j) \\
    \lnot\,\mathsf{isValue}(e_k) \\
    \MConfig{\MErr}{\MPol}{e_k} \step \MConfig{\MErr'}{\MPol'}{e_k'}}
   {\MConfig{\MErr}{\MPol}{\Eval{f}{e_1,\ldots,e_k,\ldots,e_n}} \step \MConfig{\MErr'}{\MPol'}{\Eval{f}{e_1,\ldots,e_k',\ldots,e_n}}}
@@ -325,7 +327,7 @@ $\rulename{Eval-Success}$ applies a closure $\Clos{\overline{x_i}}{e_b}$ to a li
 
 A configuration that lacks an outgoing transition is terminal; the language has no $\mathsf{errTerm}$ constructor, so stuckness is detected by exhausting the rule set rather than by an explicit error term. The fail-closed sink $\errV$ is a value (so $\mathsf{isValue}(\errV)$ and the configuration is terminal) and carries no runtime type by design --- T2 below excludes it from the typeable-value statement.
 
-There is one self-heal pattern per kind of materialization. The let-centric $\rulename{Schema-Heal}$ together with the parametric $\rulename{Healable-Heal}$ (which uniformly covers Arrow and Policy targets via $\Healable{\Tarrow{\cdots}{\cdot}}$ and $\Healable{\Tpolicy}$), and the uniform $\rulename{Gen-PolHeal}$/$\rulename{Gen-TypeErr}$/$\rulename{Gen-Budget}$ together cover every \texttt{gen} self-heal path; $\Agent{\cdot}{\cdot}$ is covered by $\rulename{Agent-Success}$ and $\rulename{Agent-PolHeal}$. The plain $\Enforce{\cdot}$ form has no separate heal rule: a $\Tpolicy$ value that fails to install is delivered by an outer healable \texttt{let}, which retries via $\rulename{Healable-Heal}$ at $\Tpolicy$. Closure application has no oracle component, so it needs none.
+There is one self-heal pattern per kind of materialization. The let-centric $\rulename{Schema-Heal}$ together with the parametric $\rulename{Healable-Heal}$ (which uniformly covers Arrow and Policy targets via $\Healable{\Tarrow{\cdots}{\cdot}}$ and $\Healable{\Tpolicy}$), and the uniform $\rulename{Gen-PolHeal}$, $\rulename{Gen-TypeErr}$, $\rulename{Gen-Budget}$ together cover every \texttt{gen} self-heal path; $\Agent{\cdot}{\cdot}$ is covered by $\rulename{Agent-Success}$ and $\rulename{Agent-PolHeal}$. The plain $\Enforce{\cdot}$ form has no separate heal rule: a $\Tpolicy$ value that fails to install is delivered by an outer healable \texttt{let}, which retries via $\rulename{Healable-Heal}$ at $\Tpolicy$. Closure application has no oracle component, so it needs none.
 
 \subsection{Mutable-State Rules}
 \label{app:rules-mut}
@@ -359,7 +361,7 @@ The following rules are the only ones that read or write the store $\MStore$; al
 \label{fig:rules-mut}
 \end{figure*}
 
-$\rulename{VarDecl-Bind}$ and $\rulename{Assign-Write}$ carry the runtime-type side condition $\StType{v}{\tau}$, so the store invariant $\forall x,\tau,v.\; \MStore(x) = (\tau, v) \Rightarrow \StType{v}{\tau}$ (a conjunct of $\WF{\cdot}$) is preserved by every write. $\rulename{VarRead}$ resolves a variable reference $x$ through the store and steps deterministically when $x$ is declared. Mutable variables use named keys in $\MStore$ and use a separate name-store from the capture-avoiding substitution underlying \texttt{let} and closure application, keeping the two binding mechanisms orthogonal.
+$\rulename{VarDecl-Bind}$ and $\rulename{Assign-Write}$ carry the runtime-type side condition $\StType{v}{\tau}$, so the store invariant $\forall~x,\tau,v.\; \MStore(x) = (\tau, v) \Rightarrow \StType{v}{\tau}$ (a conjunct of $\WF{\cdot}$) is preserved by every write. $\rulename{VarRead}$ resolves a variable reference $x$ through the store and steps deterministically when $x$ is declared. Mutable variables use named keys in $\MStore$ and use a separate name-store from the capture-avoiding substitution underlying \texttt{let} and closure application, keeping the two binding mechanisms orthogonal.
 
 \section{Proofs of Theorems~\ref{thm:pact-soundness} and \ref{thm:pact-progress}}
 \label{app:proofs}
@@ -382,7 +384,7 @@ Each proof is an induction on the derivation of $C \step C'$, mirroring the Lean
 \subsection{T1: WF-preservation}
 \label{app:proof-sound-a}
 
-The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedness clause $\forall x,\tau,v.\;\MStore(x) = (\tau,v) \Rightarrow \StType{v}{\tau}$. The proof is by cases on the $\mathtt{Step}$ constructor in \texttt{Soundness.lean}; the non-trivial cases are:
+The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedness clause $\forall~x,\tau,v.\;\MStore(x) = (\tau,v) \Rightarrow \StType{v}{\tau}$. The proof is by cases on the $\mathtt{Step}$ constructor in \texttt{Soundness.lean}; the non-trivial cases are:
 
 \begin{sloppypar}
 \paragraph{Case $\rulename{Ask}$, $\rulename{Agent-Success}$, $\rulename{Gen-Ok}$, $\rulename{Schema-Ok}$, $\rulename{Arrow-Ok}$, $\rulename{Healable-Ok}$.} The target heal context is $\emptyset$; $|\emptyset| = 0 \le \MRetry$ by definition.
@@ -400,20 +402,20 @@ The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedn
 
 \paragraph{Case $\rulename{VarRead}$.} The store invariant on the input configuration directly supplies $\StType{v}{\tau}$ for the read value; $\MErr$ and $\MStore$ are unchanged.
 
-The Arrow and Policy success/heal cases are covered uniformly by the parametric $\rulename{Healable-Ok}$/$\rulename{Healable-Heal}$ rules and dispatch through the same proof case in $\mathtt{T1\_WF\_preservation}$.
+The Arrow and Policy success/heal cases are covered uniformly by the parametric $\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$ rules and dispatch through the same proof case in $\mathtt{T1\_WF\_preservation}$.
 
 \subsection{T2: Staged materialization}
 \label{app:proof-sound-b}
 
 \begin{sloppypar}
-If the step $C \step C'$ produces a value $v$ at $C'$'s expression slot \emph{and} $v \neq \errV$, then $\exists \tau.\ \StType{v}{\tau}$. The proof (\allowbreak$\mathtt{T2\_staged\_materialization}$) factors through a value-lemma ``$\mathsf{isValue}(v) \wedge v \neq \errV \Rightarrow \exists \tau.\ \StType{v}{\tau}$'' that enumerates the value constructors. For base literals and schema/policy values the corresponding $\mathtt{vUnit}$/$\allowbreak\mathtt{vBool}$/$\allowbreak\mathtt{vNum}$/$\allowbreak\mathtt{vStr}$/$\allowbreak\mathtt{vSchema}$/$\allowbreak\mathtt{vPol}$ case applies. For closures, the $\mathtt{vClos}$ rule admits an arrow of matching arity; the T2 witness instantiates arguments and return to $\Tunit$, giving $\tau = \Tarrow{\overline{\Tunit}}{\Tunit}$ --- the precise argument and return types of the body are irrelevant to T2's existential claim. For record and array values, $\mathtt{vRec}$ and $\mathtt{vArr}$ instantiate witnesses at records with an empty field list and arrays of $\Tunit$, again as existential witnesses. The $\errV$ case is excluded by hypothesis: $\errV$ is the fail-closed sink produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ and intentionally has no runtime type, so a configuration whose expression slot is $\errV$ is a terminal failure state, not a typeable value. T2 is the per-step staged materialization claim and applies uniformly at every reduced expression that is not the sink.
+If the step $C \step C'$ produces a value $v$ at $C'$'s expression slot \emph{and} $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$. The proof (\allowbreak$\mathtt{T2\_staged\_materialization}$) factors through a value-lemma ``$\mathsf{isValue}(v) \wedge v \neq \errV \Rightarrow \exists~\tau.\ \StType{v}{\tau}$'' that enumerates the value constructors. For base literals and schema/policy values the corresponding $\mathtt{vUnit}$/$\allowbreak\mathtt{vBool}$/$\allowbreak\mathtt{vNum}$/$\allowbreak\mathtt{vStr}$/$\allowbreak\mathtt{vSchema}$/$\allowbreak\mathtt{vPol}$ case applies. For closures, the $\mathtt{vClos}$ rule admits an arrow of matching arity; the T2 witness instantiates arguments and return to $\Tunit$, giving $\tau = \Tarrow{\overline{\Tunit}}{\Tunit}$ --- the precise argument and return types of the body are irrelevant to T2's existential claim. For record and array values, $\mathtt{vRec}$ and $\mathtt{vArr}$ instantiate witnesses at records with an empty field list and arrays of $\Tunit$, again as existential witnesses. The $\errV$ case is excluded by hypothesis: $\errV$ is the fail-closed sink produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ and intentionally has no runtime type, so a configuration whose expression slot is $\errV$ is a terminal failure state, not a typeable value. T2 is the per-step staged materialization claim and applies uniformly at every reduced expression that is not the sink.
 \end{sloppypar}
 
 \subsection{T3: Policy monotonicity}
 \label{app:proof-sound-c}
 
 \begin{sloppypar}
-$\MPol$ is updated only by $\rulename{Enforce-Install}$, whose target policy $\MPol' = \Install{\MPol}{p}$ satisfies $\Allow{\MPol'} \subseteq \Allow{\MPol}$ by $\mathtt{policyInstall\_shrinks}$. All other rules leave $\MPol$ unchanged and give $\Allow{\MPol'} = \Allow{\MPol}$, hence the reflexive subset. The principal-membership check $\MPrin \in \mathrm{dom}(\MPol)$ is a runtime guard on $\rulename{Gen-PolHeal}$/\allowbreak$\rulename{Agent-PolHeal}$; it does not appear as a premise on success rules because policy violations are detected dynamically by the Cedar engine, not derivable statically.
+$\MPol$ is updated only by $\rulename{Enforce-Install}$, whose target policy $\MPol' = \Install{\MPol}{p}$ satisfies $\Allow{\MPol'} \subseteq \Allow{\MPol}$ by $\mathtt{policyInstall\_shrinks}$. All other rules leave $\MPol$ unchanged and give $\Allow{\MPol'} = \Allow{\MPol}$, hence the reflexive subset. The principal-membership check $\MPrin \in \mathrm{dom}(\MPol)$ is a runtime guard on $\rulename{Gen-PolHeal}$, $\rulename{Agent-PolHeal}$; it does not appear as a premise on success rules because policy violations are detected dynamically by the Cedar engine, not derivable statically.
 \end{sloppypar}
 
 \subsection{T4a: No transition for budget-exhausted standalone gen}
@@ -434,7 +436,7 @@ Fix a let-redex $\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p_0}$ with $\MPrin \i
 \label{app:proof-prog-c}
 
 \begin{sloppypar}
-These are wrappers around T4b: they add $\MPrin \in \mathrm{dom}(\MPol)$ and the continuation typeability $\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$ as explicit hypotheses and take a direct oracle witness $\exists v.\ \mathsf{isValue}(v) \wedge \StType{v}{\Tschema} \wedge \Oracle{s}{\MErr}{\Tschema} \ni v$ at the caller's \emph{current} heal context. The conclusion $\exists C'.\ C \step C'$ follows by applying $\rulename{Healable-Ok}$ at $\tau = \Tschema$ (resp.\ $\rulename{Agent-Success}$, whose materialization target $\Tstring$ is non-healable so no continuation check is needed) exactly as in T4b but without the intermediate ``reach some $\MErr'$'' step. Mechanized as $\mathtt{T4\_progress\_gen}$ / $\mathtt{T4\_progress\_agent}$ in \texttt{Safety.lean}; the arrow analogue follows the same pattern at $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$, again routed through $\rulename{Healable-Ok}$. The Policy analogue \allowbreak$\mathtt{T4\_progress\_gen\_policy}$ (\texttt{Safety.lean}) is the corresponding 1-line corollary of the parametric \allowbreak$\mathtt{T4\_progress\_gen\_healable}$ at $\tau = \Tpolicy$.
+These are wrappers around T4b: they add $\MPrin \in \mathrm{dom}(\MPol)$ and the continuation typeability $\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$ as explicit hypotheses and take a direct oracle witness $\exists~v.\ \mathsf{isValue}(v) \wedge \StType{v}{\Tschema} \wedge \Oracle{s}{\MErr}{\Tschema} \ni v$ at the caller's \emph{current} heal context. The conclusion $\exists~C'.\ C \step C'$ follows by applying $\rulename{Healable-Ok}$ at $\tau = \Tschema$ (resp.\ $\rulename{Agent-Success}$, whose self-healing opportunity at $\Tstring$ is non-healable so no continuation check is needed) exactly as in T4b but without the intermediate ``reach some $\MErr'$'' step. Mechanized as $\mathtt{T4\_progress\_gen}$ / $\mathtt{T4\_progress\_agent}$ in \texttt{Safety.lean}; the arrow analogue follows the same pattern at $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$, again routed through $\rulename{Healable-Ok}$. The Policy analogue \allowbreak$\mathtt{T4\_progress\_gen\_policy}$ (\texttt{Safety.lean}) is the corresponding 1-line corollary of the parametric \allowbreak$\mathtt{T4\_progress\_gen\_healable}$ at $\tau = \Tpolicy$.
 \end{sloppypar}
 
 \subsection{Termination}
@@ -452,7 +454,7 @@ The argument is on paper. Between two successive oracle firings, only pure-core 
 \label{app:aux-defs}
 
 \begin{sloppypar}
-\paragraph{Multi-step closure.} The reflexive-transitive closure $\step^{*}$ of $\step$ is mechanized as $\mathtt{Steps}$ (\texttt{Reduction.lean}). Composite end-to-end progress comes in two flavours: an \emph{independent} statement bundling per-redex single-step progresses (\allowbreak$\mathtt{clinical\_trial\_progresses}$, one $\exists C'.\ C \step C'$ per oracle/projection redex named in Figure~\ref{fig:clinical-trial}), and a \emph{sequential} statement chaining the redexes through a single trace (\allowbreak$\mathtt{ClinicalTrial.clinicalTrialPrefix\_steps}$ -- a 7-step $\mathtt{Steps}$ chain through Schema-gen, Policy-gen, Array[Schema]-gen, and the cost projection -- both in \texttt{Examples.lean}). The independent form is the natural progress lemma; the sequential form is the regression test that a single oracle/policy environment sustains the full prefix.
+\paragraph{Multi-step closure.} The reflexive-transitive closure $\step^{*}$ of $\step$ is mechanized as $\mathtt{Steps}$ (\texttt{Reduction.lean}). Composite end-to-end progress comes in two flavours: an \emph{independent} statement bundling per-redex single-step progresses (\allowbreak$\mathtt{clinical\_trial\_progresses}$, one $\exists~C'.\ C \step C'$ per oracle/projection redex named in Figure~\ref{fig:clinical-trial}), and a \emph{sequential} statement chaining the redexes through a single trace (\allowbreak$\mathtt{ClinicalTrial.clinicalTrialPrefix\_steps}$ -- a 7-step $\mathtt{Steps}$ chain through Schema-gen, Policy-gen, Array[Schema]-gen, and the cost projection -- both in \texttt{Examples.lean}). The independent form is the natural progress lemma; the sequential form is the regression test that a single oracle/policy environment sustains the full prefix.
 \end{sloppypar}
 
 \begin{sloppypar}

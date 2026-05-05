@@ -62,7 +62,7 @@ def L20_agent (s : String) : Expr :=
 /-- L7 progresses: `let crf: Schema = gen ... ; var 0`. -/
 theorem L7_progresses
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v .tSchema ∧ O s ec .tSchema v) :
     ∃ C', Step O ⟨ec, P, σ, L7_genSchema s⟩ C' :=
   T4_truthful_success_gen O ec P σ s 0 π hauth hO
@@ -71,7 +71,7 @@ theorem L7_progresses
     `tPolicy` healability extension from H2. -/
 theorem L9_10_progresses
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v .tPolicy ∧ O s ec .tPolicy v) :
     ∃ C', Step O ⟨ec, P, σ, L9_genPolicy s⟩ C' :=
   T4_truthful_success_gen_healable O ec P σ .tPolicy s 0 π
@@ -82,7 +82,7 @@ theorem L9_10_progresses
     recursive `Ty.healable` on `tArray T`. -/
 theorem L13_14_progresses
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v (.tArray .tSchema) ∧ O s ec (.tArray .tSchema) v) :
     ∃ C', Step O ⟨ec, P, σ, L13_genArrayOfSchema s⟩ C' :=
   T4_truthful_success_gen_healable O ec P σ (.tArray .tSchema) s 0 π
@@ -123,7 +123,7 @@ theorem letGen_missing_field_heals
     (O : Oracle) (P : Policy) (σ : Store)
     (sV : String) (πGen : Principal) (f : String)
     (fs : List (String × Value))
-    (hauth   : policyAllows P πGen .gen)
+    (hauth   : prinDeclared P πGen)
     (hOmiss  : O sV [] .tSchema (.recV fs))
     (hrt     : RtType (.recV fs) .tSchema)
     (hmiss   : fs.lookup f = none) :
@@ -146,7 +146,7 @@ theorem letGen_missing_field_heals
 theorem L17_visitCost_with_missing_field_heals
     (O : Oracle) (P : Policy) (σ : Store)
     (sV : String) (πGen : Principal)
-    (hauth : policyAllows P πGen .gen)
+    (hauth : prinDeclared P πGen)
     (hOmiss : O sV [] .tSchema (.recV [("patient_id", .strV "p1")]))
     (hrt    : RtType (.recV [("patient_id", .strV "p1")]) .tSchema) :
     Step O
@@ -164,7 +164,7 @@ theorem L17_visitCost_with_missing_field_heals
 theorem L18_patientId_self_heal
     (O : Oracle) (P : Policy) (σ : Store)
     (sV : String) (πGen : Principal)
-    (hauth : policyAllows P πGen .gen)
+    (hauth : prinDeclared P πGen)
     (hOmiss : O sV [] .tSchema (.recV [("cost", .numV 0)]))
     (hrt    : RtType (.recV [("cost", .numV 0)]) .tSchema) :
     Step O
@@ -186,7 +186,7 @@ theorem L18_patientId_self_heal
     `Step.letGenSuccessHealable` instantiates the continuation. -/
 theorem L17_heal_then_succeed
     (P : Policy) (σ : Store) (sV : String) (πGen : Principal)
-    (hauth  : policyAllows P πGen .gen)
+    (hauth  : prinDeclared P πGen)
     (pid    : String) (n : Int)
     (O : Oracle)
     (hOmiss : O sV [] .tSchema (.recV [("patient_id", .strV pid)]))
@@ -217,7 +217,7 @@ theorem L17_heal_then_succeed
     Steps.refl
 theorem L20_progresses
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (π : Principal)
-    (hauth : policyAllows P π .agent)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v .tString ∧ O s ec .tString v) :
     ∃ C', Step O ⟨ec, P, σ, L20_agent s⟩ C' :=
   T4_truthful_success_agent O ec P σ s 0 π hauth hO
@@ -242,8 +242,8 @@ theorem clinical_trial_progresses
     (sSchema sPolicy sArray sAgent : String)
     (πGen πAgent : Principal)
     (fs : List (String × Value)) (n : Int)
-    (hauthGen   : policyAllows P πGen   .gen)
-    (hauthAgent : policyAllows P πAgent .agent)
+    (hauthGen   : prinDeclared P πGen)
+    (hauthAgent : prinDeclared P πAgent)
     (hOSchema : ∃ v, RtType v .tSchema ∧ O sSchema ec .tSchema v)
     (hOPolicy : ∃ v, RtType v .tPolicy ∧ O sPolicy ec .tPolicy v)
     (hOArray  : ∃ v, RtType v (.tArray .tSchema) ∧
@@ -295,7 +295,7 @@ theorem clinicalTrialPrefix_steps
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store)
     (sS sP sA : String) (πGen : Principal)
     (fs : List (String × Value)) (n : Int)
-    (hauthGen : policyAllows P πGen .gen)
+    (hauthGen : prinDeclared P πGen)
     (hOSchema : ∃ v, RtType v .tSchema ∧ O sS ec .tSchema v)
     (hOPolicy : ∃ v, RtType v .tPolicy ∧ O sP [] .tPolicy v)
     (hOArray  : ∃ v, RtType v (.tArray .tSchema) ∧

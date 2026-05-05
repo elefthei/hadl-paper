@@ -34,7 +34,7 @@ theorem T4_budget_no_heal
     `StaticTypeOK.var0`. -/
 theorem T4_truthful_success
     (O : Oracle) (P : Policy) (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (htruth : Oracle.eventuallyTruthful O retryBudget s .tSchema (fun _ => True)) :
     ∃ ec σ C',
       Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0)⟩ C' := by
@@ -50,7 +50,7 @@ theorem T4_truthful_success
 theorem T4_truthful_success_arrow
     (O : Oracle) (P : Policy) (args : List Ty) (ret : Ty)
     (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (htruth : Oracle.eventuallyTruthful O retryBudget s
                 (.tArrow args ret) (fun _ => True)) :
     ∃ ec σ C',
@@ -71,7 +71,7 @@ theorem T4_truthful_success_healable
     (O : Oracle) (P : Policy) (τ : Ty)
     (s : String) (n : Nat) (π : Principal)
     (hheal : Ty.healable τ = true)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (htruth : Oracle.eventuallyTruthful O retryBudget s τ (fun _ => True)) :
     ∃ ec σ C',
       Step O ⟨ec, P, σ, .letE τ (.gen τ s (.bvar n)) (.var 0)⟩ C' := by
@@ -88,7 +88,7 @@ theorem T4_truthful_success_healable
     `Ty.healable` definition. -/
 theorem nested_array_of_schema_succeeds
     (O : Oracle) (P : Policy) (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (htruth : Oracle.eventuallyTruthful O retryBudget s
                 (.tArray .tSchema) (fun _ => True)) :
     ∃ ec σ C',
@@ -124,7 +124,7 @@ theorem clinical_trial_visit_cost_projects
     unchanged. -/
 theorem T4_truthful_success_agent
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .agent)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v .tString ∧ O s ec .tString v) :
     ∃ C', Step O ⟨ec, P, σ, .agent s (.bvar n)⟩ C' := by
   obtain ⟨v, hrt, ho⟩ := hO
@@ -139,7 +139,7 @@ theorem T4_truthful_success_gen_healable
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (τ : Ty)
     (s : String) (n : Nat) (π : Principal)
     (hheal : Ty.healable τ = true)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v τ ∧ O s ec τ v) :
     ∃ C',
       Step O ⟨ec, P, σ, .letE τ (.gen τ s (.bvar n)) (.var 0)⟩ C' := by
@@ -156,7 +156,7 @@ theorem T4_progress_gen_healable
     (hC : C.expr = .letE τ (.gen τ s (.bvar n)) (.var 0))
     (_hwf : Config.WF C)
     (hheal : Ty.healable τ = true)
-    (hauth : policyAllows C.pol π .gen)
+    (hauth : prinDeclared C.pol π)
     (hO : ∃ v, RtType v τ ∧ O s C.err τ v) :
     ∃ C', Step O C C' := by
   rcases C with ⟨ec, P, σ, e⟩
@@ -166,7 +166,7 @@ theorem T4_progress_gen_healable
 /-- Schema corollary of the parametric gen-success theorem. -/
 theorem T4_truthful_success_gen
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store) (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v .tSchema ∧ O s ec .tSchema v) :
     ∃ C',
       Step O ⟨ec, P, σ, .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0)⟩ C' :=
@@ -178,7 +178,7 @@ theorem T4_progress_gen
     (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
     (hC : C.expr = .letE .tSchema (.gen .tSchema s (.bvar n)) (.var 0))
     (hwf : Config.WF C)
-    (hauth : policyAllows C.pol π .gen)
+    (hauth : prinDeclared C.pol π)
     (hO : ∃ v, RtType v .tSchema ∧ O s C.err .tSchema v) :
     ∃ C', Step O C C' :=
   T4_progress_gen_healable O C .tSchema s n π hC hwf
@@ -191,7 +191,7 @@ theorem T4_progress_gen
 theorem T4_truthful_success_gen_arrow
     (O : Oracle) (ec : ErrCtx) (P : Policy) (σ : Store)
     (args : List Ty) (ret : Ty) (s : String) (n : Nat) (π : Principal)
-    (hauth : policyAllows P π .gen)
+    (hauth : prinDeclared P π)
     (hO : ∃ v, RtType v (.tArrow args ret) ∧ O s ec (.tArrow args ret) v) :
     ∃ C',
       Step O ⟨ec, P, σ,
@@ -212,7 +212,7 @@ theorem T4_progress_gen_policy
     (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
     (hC : C.expr = .letE .tPolicy (.gen .tPolicy s (.bvar n)) (.var 0))
     (hwf : Config.WF C)
-    (hauth : policyAllows C.pol π .gen)
+    (hauth : prinDeclared C.pol π)
     (hO : ∃ v, RtType v .tPolicy ∧ O s C.err .tPolicy v) :
     ∃ C', Step O C C' :=
   T4_progress_gen_healable O C .tPolicy s n π hC hwf
@@ -223,7 +223,7 @@ theorem T4_progress_agent
     (O : Oracle) (C : Config) (s : String) (n : Nat) (π : Principal)
     (hC : C.expr = .agent s (.bvar n))
     (_hwf : Config.WF C)
-    (hauth : policyAllows C.pol π .agent)
+    (hauth : prinDeclared C.pol π)
     (hO : ∃ v, RtType v .tString ∧ O s C.err .tString v) :
     ∃ C', Step O C C' := by
   rcases C with ⟨ec, P, σ, e⟩

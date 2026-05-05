@@ -30,10 +30,6 @@ def OAction.princ : OAction → Principal
   | .gen _ _ π => π
   | .agent _ π => π
 
-def OAction.eff : OAction → Action
-  | .gen _ _ _   => .gen
-  | .agent _ _   => .agent
-
 opaque explain : OAction → Value → String
 opaque explainPolicy : OAction → Policy → String
 
@@ -114,7 +110,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   /-- `agent` success: oracle returns a well-typed string and policy
       allows; flush heal context to `[]`. -/
   | agentSuccess {ec P σ v s pr π}
-      (hauth   : policyAllows P π .agent)
+      (hauth   : prinDeclared P π)
       (horacle : O s ec .tString v)
       (hrt     : RtType v .tString) :
       Step O ⟨ec, P, σ, .agent s pr⟩ ⟨[], P, σ, .val v⟩
@@ -122,7 +118,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   /-- `agent` policy-heal: policy denied within budget; record error and
       retry. -/
   | agentHealPol {ec P σ s pr π}
-      (hdeny   : ¬ policyAllows P π .agent)
+      (hdeny   : ¬ prinDeclared P π)
       (hbudget : ErrCtx.retries
                    (ec ++ [Event.error (explainPolicy (.agent s π) P)])
                    ≤ retryBudget) :
@@ -156,7 +152,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       continue. -/
   | letGenSuccessNonheal {ec P σ τ s pr π v p}
       (hheal   : Ty.healable τ = false)
-      (hauth   : policyAllows P π .gen)
+      (hauth   : prinDeclared P π)
       (horacle : O s ec τ v)
       (hrt     : RtType v τ) :
       Step O ⟨ec, P, σ, .letE τ (.gen τ s pr) p⟩
@@ -167,7 +163,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       at non-healable τ; at healable τ value-fail has no rule. -/
   | letGenTypeError {ec P σ τ s pr π v p}
       (hheal   : Ty.healable τ = false)
-      (hauth   : policyAllows P π .gen)
+      (hauth   : prinDeclared P π)
       (horacle : O s ec τ v)
       (hbad    : ¬ RtType v τ) :
       Step O ⟨ec, P, σ, .letE τ (.gen τ s pr) p⟩
@@ -184,7 +180,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
   /-- Let-redex policy-heal (uniform across all τ): policy denied gen
       action; record error and retry. -/
   | letGenHealPol {ec P σ τ s pr π p}
-      (hdeny   : ¬ policyAllows P π .gen)
+      (hdeny   : ¬ prinDeclared P π)
       (hbudget : ErrCtx.retries
                    (ec ++ [Event.error (explainPolicy (.gen τ s π) P)])
                    ≤ retryBudget) :
@@ -207,7 +203,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       recovers the per-shape rules. -/
   | letGenSuccessHealable {ec P σ τ s pr π v p τ'}
       (hheal   : Ty.healable τ = true)
-      (hauth   : policyAllows P π .gen)
+      (hauth   : prinDeclared P π)
       (horacle : O s ec τ v)
       (hrt     : RtType v τ)
       (hpok    : StaticTypeOK τ p τ')
@@ -221,7 +217,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       per-shape Schema / Arrow self-heal rules. -/
   | letGenHealHealable {ec P σ τ s pr π v p τ' ε}
       (hheal   : Ty.healable τ = true)
-      (hauth   : policyAllows P π .gen)
+      (hauth   : prinDeclared P π)
       (horacle : O s ec τ v)
       (hrt     : RtType v τ)
       (hperr   : ¬ StaticTypeOK τ p τ')
@@ -246,7 +242,7 @@ inductive Step (O : Oracle) : Config → Config → Prop where
       analysis is future work. -/
   | letGenHealRecordFields {ec P σ τ s pr π v p τ' ε}
       (hheal    : Ty.healable τ = true)
-      (hauth    : policyAllows P π .gen)
+      (hauth    : prinDeclared P π)
       (horacle  : O s ec τ v)
       (hrt      : RtType v τ)
       (hpok     : StaticTypeOK τ p τ')
