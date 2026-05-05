@@ -4,7 +4,7 @@
 
 workflow clinical_trial() -> String {
   let trial  = ask "Describe the clinical trial"
-  let crf: Schema   = gen "Generate a CRF schema for `trial`"
+  let crf: Schema = gen "Generate a CRF schema for `trial`"
   let coordinator = restrict root
   let policy: Policy = gen "Coordinators cannot see data in
     unblinded folder"
@@ -22,14 +22,9 @@ workflow clinical_trial() -> String {
 }
 \end{lstlisting}
 \caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf} typed binding),
-  gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization (default principal here; the surface syntax also accepts an explicit \texttt{as} clause).
-  \texttt{@retries 3} activates feedback-driven self-healing: if the generated schema lacks a field
-  accessed later (\texttt{js visit.cost}, \texttt{js visit.patient\_id}), the runtime retries the causal
-  \texttt{gen} with the violated constraint as feedback before any visit data is collected.
-  Mechanized in Lean as \texttt{Step.letGenHealRecordFields} (\texttt{Reduction.lean:233}),
-  triggered by \texttt{Value.recordSatisfies} disagreeing with \texttt{Expr.fieldSitesAt} on the
-  let-gen continuation; worked examples
-  \texttt{L17\_visitCost\_with\_missing\_field\_heals} and
-  \texttt{L18\_patientId\_self\_heal} (\texttt{Examples.lean}).}
+  gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization. 
+  \texttt{@retries 3} configures feedback-driven self-healing: if the generated schema (crf) lacks a field
+  accessed later (cost, patient\_id), the runtime retries the causal
+  \texttt{gen} with the violated constraint as feedback, before any visit data is collected.}
 \label{fig:clinical-trial}
 \end{figure}

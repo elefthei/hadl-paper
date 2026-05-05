@@ -33,30 +33,7 @@ with the schema and error message manually injected into the prompt.
 \subsection{Results}
 \label{sec:eval-results}
 
-\begin{table}[t]
-\centering
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}lrcrrcl@{}}
-\toprule
-System & LoC & \checkmark & rt (s) & tok.\ i/o & q/c/m & rec. \\
-\midrule
-\sys              & 19  & \textcolor{OliveGreen}{\checkmark} & 37.7    & 2380/1732 & 7/3/0  & auto \\
-LangGraph         & 128 & \textcolor{BrickRed}{$\times$}     & 27.5$^*$ & 407/1760$^*$ & 4/0/3 & none \\
-\;+assertions     & 154 & \textcolor{OliveGreen}{\checkmark} & 81.2    & 1798/4605 & 10/9/0 & manual \\
-DSPy              & 102 & \textcolor{BrickRed}{$\times$}     & 34.1$^*$ & 359/2112$^*$ & 4/0/3 & none \\
-\;+assertions     & 135 & \textcolor{OliveGreen}{\checkmark} & 80.8    & 1783/4573 & 10/9/0 & manual \\
-\bottomrule
-\end{tabular}
-\caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times.
-  \emph{LoC} counts non-empty, non-comment implementation lines.
-  \checkmark marks whether all three runs completed.
-  \emph{rt} is mean wall-clock runtime in seconds.
-  \emph{tok.\ i/o} is mean input/output tokens.
-  \emph{q/c/m} is mean LLM calls and total violations caught or missed across runs.
-  \emph{rec.} is recovery. \emph{auto} means language-enforced, \emph{manual} means developer-written, and \emph{none} means no recovery.
-  Plain baselines ($^*$) crashed at a field-access error, so their figures cover only calls up to that point.}
-\label{tab:eval-clinical}
-\end{table}
+\input{figures/eval-table}
 
 \paragraph{Plain baselines fail late.}
 LangGraph and DSPy without assertions fail on every run. The bare visit

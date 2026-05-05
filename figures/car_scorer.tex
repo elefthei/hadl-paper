@@ -41,7 +41,7 @@ workflow pick_car() -> String {
 \begin{lstlisting}[language=pact,basicstyle=\ttfamily\footnotesize,showstringspaces=false,breaklines=true,breakindent=0pt]
 // produced by the gen
 // call on line 5 above
-workflow score(car: car_schema)
+workflow scorer(car: car_schema)
   -> Number {
   let comfort: Number = gen "Rate
     the comfort of `car.name`."
