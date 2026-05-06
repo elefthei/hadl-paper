@@ -165,7 +165,7 @@
 \newcommand{\TJerr}[4]{#1 \vdash #2 : #3 \;\Rightarrow\; \mathsf{err}(#4)}
 % Context for continuation checks: just the single let-bound variable.
 \newcommand{\Gext}[2]{#1 {:} #2}
-% PolOk removed: no static policy judgment. PolHeal uses π ∉ dom(Π).
+% Static policy judgment is \PrinDeclared{Π}{π} = π ∈ dom(Π); PolHeal fires on its negation.
 \newcommand{\WF}[1]{\vdash #1 : \mathsf{wf}}
 
 %%%%%%%%%%%%% Pact formal model — reduction and oracle
