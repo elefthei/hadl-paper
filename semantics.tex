@@ -150,7 +150,7 @@ on principal denial.
    |\MErr \cdot \ErrEv{\epsilon}| \le \MRetry}
   {\MConfig{\MErr}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p}}}
 \end{mathpar}
-\caption{Continuation-driven self-heal at $\tau = \Tschema$. Both rules require a well-typed oracle response and an authorized principal; they branch on whether the continuation $p$ type-checks under $\Gext{x}{\Tschema}$. \rulename{Schema-Ok} commits via $\Subst{p}{v}$; \rulename{Schema-Heal} appends the typing-error feedback $\epsilon$ and retries. The Arrow analogue and the parametric \rulename{Healable-Ok}, \rulename{Healable-Heal} (covering $\Tpolicy$ and nested compounds like $\Tarr{\Tschema}$) appear in Appendix~\ref{app:rules}.}
+\caption{Continuation-driven self-heal at $\tau = \Tschema$. \rulename{Schema-Ok} commits via $\Subst{p}{v}$ when the continuation type-checks; \rulename{Schema-Heal} appends the typing-error feedback $\epsilon$ and retries. The Arrow analogue and the parametric \rulename{Healable-Ok}, \rulename{Healable-Heal} appear in Appendix~\ref{app:rules}.}
 \label{fig:rules-core}
 \end{figure*}
 

@@ -171,7 +171,7 @@ A record or array containing a healable component is itself healable, since the 
    |\MErr \cdot \ErrEv{\epsilon}| \le \MRetry}
   {\MConfig{\MErr}{\MPol}{\Agent{s}{\MPrin}} \step \MConfig{\MErr \cdot \ErrEv{\epsilon}}{\MPol}{\Agent{s}{\MPrin}}}
 \end{mathpar}
-\caption{Reduction rules for \texttt{gen} and \texttt{agent}. Non-healable types use $\rulename{Gen-Ok}$, $\rulename{Gen-TypeErr}$; healable types use the Ok/Heal pairs (Schema, Arrow, and parametric $\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$). $\rulename{Gen-Budget}$ sinks to $\errV$ when the heal budget is exhausted at a healable $\tau$; $\rulename{Gen-PolHeal}$, $\rulename{Agent-PolHeal}$ retry on principal mismatch.}
+\caption{Reduction rules for \texttt{gen} and \texttt{agent}. Non-healable types use Gen-Ok/Gen-TypeErr; healable types use the Ok/Heal pairs. Gen-Budget sinks to $\errV$ when the heal budget is exhausted; Gen-PolHeal/Agent-PolHeal retry on principal mismatch.}
 \label{fig:rules-gen}
 \end{figure*}
 
@@ -286,7 +286,7 @@ $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
   {|\overline{v_i}| = n \\ \forall~i.\ \mathsf{isValue}(v_i)}
   {\MConfig{\MErr}{\MPol}{\Eval{(\Clos{\overline{x_i}}{e_b})}{\overline{v_i}}} \step \MConfig{\MErr}{\MPol}{e_b[\overline{v_i/x_i}]}}
 \end{mathpar}
-\caption{Human I/O and closure application: \texttt{ask}/\texttt{say} and the simultaneous-substitution rule for $n$-ary closures.}
+\caption{Human I/O and closure application: \texttt{ask}/\texttt{say} and simultaneous substitution for $n$-ary closures.}
 \label{fig:rules-io}
 \end{figure*}
 
@@ -321,7 +321,7 @@ $\rulename{Eval-Success}$ applies a closure $\Clos{\overline{x_i}}{e_b}$ to a li
    \MConfig{\MErr}{\MPol}{e_k} \step \MConfig{\MErr'}{\MPol'}{e_k'}}
   {\MConfig{\MErr}{\MPol}{\Eval{f}{e_1,\ldots,e_k,\ldots,e_n}} \step \MConfig{\MErr'}{\MPol'}{\Eval{f}{e_1,\ldots,e_k',\ldots,e_n}}}
 \end{mathpar}
-\caption{Structural-congruence rules driving CBV reduction: function position first, then arguments left-to-right.}
+\caption{Structural-congruence rules for CBV reduction: function position first, then arguments left-to-right.}
 \label{fig:rules-cong}
 \end{figure*}
 
@@ -357,7 +357,7 @@ The following rules are the only ones that read or write the store $\MStore$; al
   {\MStore(x) = (\tau, v)}
   {\MConfigS{\MErr}{\MPol}{\MStore}{x} \step \MConfigS{\MErr}{\MPol}{\MStore}{v}}
 \end{mathpar}
-\caption{Mutable-state rules: declarations, assignments, and reads against the typed store $\MStore$. All other rules elide $\MStore$.}
+\caption{Mutable-state rules for declarations, assignments, and reads over the typed store $\MStore$.}
 \label{fig:rules-mut}
 \end{figure*}
 

@@ -21,10 +21,6 @@ workflow clinical_trial() -> String {
   agent "Write final report for the `visits`"
 }
 \end{lstlisting}
-\caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf} typed binding),
-  gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization. 
-  \texttt{@retries 3} configures feedback-driven self-healing: if the generated schema (crf) lacks a field
-  accessed later (cost, patient\_id), the runtime retries the causal
-  \texttt{gen} with the violated constraint as feedback, before any visit data is collected.}
+\caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf}), gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization. \texttt{@retries 3} enables feedback-driven self-healing when the generated schema lacks a later-accessed field.}
 \label{fig:clinical-trial}
 \end{figure}

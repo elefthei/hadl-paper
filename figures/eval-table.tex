@@ -13,14 +13,7 @@ DSPy              & 102 & \textcolor{BrickRed}{$\times$}     & 34.1$^*$ & 359/21
 \;+assertions     & 135 & \textcolor{OliveGreen}{\checkmark} & 80.8    & 1783/\textbf{4573} & 10/9/0 & manual \\
 \bottomrule
 \end{tabular}
-\caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times.
-  \emph{LoC} counts non-empty, non-comment implementation lines.
-  \checkmark marks whether all three runs completed.
-  \emph{rt} is mean wall-clock runtime in seconds.
-  \emph{tok.\ i/o} is mean input/output tokens.
-  \emph{q/c/m} is mean LLM queries (q) / caught (c) /missed (m) across runs.
-  \emph{rec.} is recovery mode---\emph{auto} means language-enforced, \emph{manual} means developer-written, and \emph{none} means no recovery.
-  Plain baselines ($^*$) crashed with field-access errors, figures cover only calls up to that point.}
+\caption{Clinical-trial workflow comparison across five systems, each run $K=3$ times. \emph{LoC} counts non-empty, non-comment lines; \checkmark marks whether all three runs completed; \emph{rt} is mean runtime; \emph{tok.\ i/o} is mean input/output tokens; \emph{q/c/m} is mean LLM queries / caught / missed; \emph{rec.} is recovery mode (\emph{auto}/\emph{manual}/\emph{none}). Plain baselines ($^*$) crashed with field-access errors, so figures cover only calls up to that point.}
 \label{tab:eval-clinical}
 \end{table}
 
