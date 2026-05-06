@@ -118,38 +118,3 @@ increase output tokens from 1{,}732 to roughly 4{,}600. The assertion
 baselines also require substantially more code. LangGraph with
 assertions is 154 lines and DSPy with assertions is 135 lines, compared
 with 19 lines for the \pact{} workflow.
-
-\subsection{Threats to Validity}
-\label{sec:eval-threats}
-
-This evaluation is a focused case study rather than a broad benchmark.
-It uses one workflow, one model family, and three runs per system.
-Schema healing triggered on every \pact{} run because the bare clinical
-prompt consistently omitted \texttt{cost}, and \pact{} repaired the
-schema on the first retry. The claim is therefore not that the LLM will
-always repair every schema after one retry. The claim is that, when a
-structural defect is repairable, \pact{} localizes the repair to the
-causal generated artifact before dependent calls execute.
-
-The authorization comparison is partly qualitative. The assertion
-baselines can be made correct by careful developers, but the property is
-not enforced by the framework. Omitting a manual authorization check at
-one call site silently bypasses the intended policy. In \pact{}, the
-Cedar check is part of the semantics of \texttt{gen} and \texttt{agent}
-after policy installation.
-
-The authorization evaluation does not include a run in which a 
-genuine Cedar denial is triggered, because doing so would require 
-deliberately misconfiguring the principal structure in a way that 
-falls outside the scope of this case study. The formal coverage of that case is provided by the Gen-PolHeal 
-and Agent-PolHeal rules in Section~\ref{sec:sem-reduction} and 
-their mechanized Lean counterparts.
-
-The semantics defines five possible outcomes for any terminating run:
-\begin{itemize}
-  \item \emph{success} (reduction reaches a value configuration),
-  \item \emph{type rejection} (a non-healable \texttt{gen} produced an ill-typed value and fired \rulename{Gen-TypeErr}, or the budget exhausted and fired \rulename{Gen-Budget}),
-  \item \emph{policy rejection} (\rulename{Gen-PolHeal} consumed the full budget),
-  \item \emph{policy-install failure} (the deny-all guard or action-type check rejected an \texttt{enforce} policy after $\MRetry$ retries), or
-  \item \emph{oracle stall} (every oracle response inside budget was ill-typed at a healable $\tau$, so no rule fired and the trace got stuck).
-\end{itemize}

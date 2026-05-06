@@ -1,8 +1,46 @@
 \section{Implementation}
 \label{sec:implementation}
 
-\pact is implemented in Rust: PEG parser, type checker, and async tree-walking interpreter with no code generation. \texttt{js} expressions and backtick interpolation run on an embedded JavaScript engine (Boa) with \pact variables mirrored as globals. \texttt{gen}/\texttt{agent} calls are dispatched through the GitHub Copilot SDK. \texttt{ask}/\texttt{say} bind to a configurable channel. \texttt{eval} deserializes a JSON-serialized workflow produced by an earlier \texttt{gen} and re-enters the interpreter in the caller's environment. Before each \texttt{gen}/\texttt{agent} call the type checker discharges the static premise $\PrinDeclared{\MPol}{\MPrin}$ against the principal given by the \texttt{as} clause (or \texttt{root} when none is given). The staged re-checker and policy-install discipline of \sect{sec:design-gradual} are implemented directly by the interpreter, backed by a central policy store seeded with the baseline $\MPol_0 = \texttt{allow(root,\;*,\;*)}$ and tightened only by \texttt{enforce}. The full source is in the submission artifact.
+\pact is implemented in Rust: PEG parser, type checker, and async tree-walking
+interpreter with no code generation. Record projections, arithmetic,
+comparisons, and backtick interpolation run on an embedded JavaScript engine
+(Boa) with \pact variables mirrored as globals. \texttt{gen}/\texttt{agent}
+calls are dispatched through the GitHub Copilot SDK. \texttt{ask}/\texttt{say}
+bind to a configurable channel. \texttt{eval} deserializes a JSON-serialized
+workflow produced by an earlier \texttt{gen} and re-enters the interpreter in
+the caller's environment. Before each \texttt{gen}/\texttt{agent} call the type
+checker discharges the static premise $\PrinDeclared{\MPol}{\MPrin}$ against the
+principal given by the \texttt{as} clause (or \texttt{root} when none is given).
+The staged re-checker and policy-install discipline of \sect{sec:design-gradual}
+are implemented directly by the interpreter, backed by a central policy store
+seeded with the baseline $\MPol_0 = \texttt{allow(root,\;*,\;*)}$ and tightened
+only by \texttt{enforce}. The full source is in the submission artifact.
 
-\paragraph{Runtime policy monitor.} Filesystem authorization is enforced by a runtime monitor we built on top of the GitHub Copilot CLI. The monitor intercepts every file or directory operation an \texttt{agent} (or a tool-using \texttt{gen}) performs. At each interception it constructs a Cedar request whose \texttt{principal} is the \texttt{as}-clause principal in scope (default \texttt{root}), whose \texttt{action} is one of \texttt{Read}, \texttt{Write}, or \texttt{Exec} derived from the underlying syscall or Copilot CLI tool category (file readers and \texttt{cat}-like tools map to \texttt{Read}, editors and writers to \texttt{Write}, shell and process spawn to \texttt{Exec}), and whose \texttt{resource} is the file or directory the operation targets. The monitor consults the currently installed policy store: an allow decision lets the operation proceed; a deny is reified as a healable error event in $\MErr$ with the precise denial reason and triggers feedback-driven retry; a Cedar parse failure fails closed. This separation is exactly what licenses the static premise of \sect{sec:semantics} to require only $\PrinDeclared{\MPol}{\MPrin}$: action and resource information becomes available only when the agent acts, and is therefore decided just-in-time rather than at the redex.
+\paragraph{Runtime policy monitor.} Filesystem authorization is enforced by a
+runtime monitor we built on top of the GitHub Copilot SDK~\cite{CopilotSDKRust2026}. The monitor
+intercepts every file or directory operation an \texttt{agent} (or a tool-using
+\texttt{gen}) performs. At each interception it constructs a Cedar request whose
+\texttt{principal} is the \texttt{as}-clause principal in scope (default
+\texttt{root}), whose \texttt{action} is one of \texttt{Read}, \texttt{Write},
+or \texttt{Exec} derived from the underlying syscall or Copilot CLI tool
+category (file readers and \texttt{cat}-like tools map to \texttt{Read}, editors
+and writers to \texttt{Write}, shell and process spawn to \texttt{Exec}), and
+whose \texttt{resource} is the file or directory the operation targets. The
+monitor consults the currently installed policy store: an allow decision lets
+the operation proceed; a deny blocks the operation and fails closed; a Cedar parse
+failure likewise fails closed. This separation is exactly what licenses the static
+premise of \sect{sec:semantics} to require only $\PrinDeclared{\MPol}{\MPrin}$:
+action and resource information becomes available only when the agent acts, and
+is therefore decided just-in-time rather than at the redex.
 
-\paragraph{Mechanized vs.\ prototyped.} The Lean development verifies the abstract semantics: syntax, typing, the policy and oracle judgments, the reduction relation, and the per-step safety theorems of \sect{sec:semantics}. The Rust runtime implements the same control flow over the same data model, but the Boa bridge for \texttt{js}, the Copilot SDK transport for \texttt{gen}/\texttt{agent}, the runtime policy monitor described above, and the I/O channel for \texttt{ask}/\texttt{say} sit outside the mechanized core: their behavior is treated as the oracle and ambient effect environment over which the proofs quantify. Cedar itself is mechanized; the abstract install discipline and its monotonicity are verified in Lean, so the prototype inherits the install-only-shrinks invariant by construction.
+\paragraph{Mechanized vs.\ prototyped.} The formal development verifies the
+abstract semantics: syntax, typing, the policy and oracle judgments, the
+reduction relation, and the per-step safety theorems of \sect{sec:semantics}.
+The Rust runtime implements the same control flow over the same data model, but
+the Boa JS bridge for arithmetic, field projections, and comparisons, the Copilot
+SDK transport for \texttt{gen}/\texttt{agent}, the runtime policy monitor
+described above, and the I/O channel for \texttt{ask}/\texttt{say} sit outside
+the mechanized core: their behavior is treated as the oracle and ambient effect
+environment over which the proofs quantify. Cedar itself is mechanized; the
+abstract install discipline and its monotonicity are verified, so the
+prototype inherits the install-only-shrinks invariant by construction.

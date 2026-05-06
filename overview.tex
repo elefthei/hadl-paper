@@ -1,35 +1,38 @@
 \section{Overview}
 \label{sec:overview}
 
-We introduce \pact through two self-contained workflows. The 
+We introduce \pact through two self-contained examples. The 
 clinical-trial workflow of Figure~\ref{fig:clinical-trial} covers 
 gradual validation of types and policies. A second example, the 
 car-recommendation workflow of Figure~\ref{fig:overview-workflow}, 
 covers workflow generation. Together they illustrate all three 
-forms of gradual validation that \pact provides.
+forms of gradual validation and self-healing that \pact provides.
 
 \pact programs consist of workflow declarations, which are typed 
 functions that compose four domain-specific primitives with 
 standard imperative constructs. \texttt{ask} prompts a human 
-operator and returns a \texttt{String}. \texttt{say} prints a 
-string and returns unit. \texttt{gen} sends a description to an 
+operator and returns a textual answer (\texttt{String}), \texttt{say} prints a 
+string and returns unit. \texttt{gen} sends an LLM prompt to an 
 LLM session configured to return structured data and requires an 
 explicit type annotation at the binding site. \texttt{agent} sends 
-an instruction to an LLM reasoning session. These are first-class 
+an instruction to an multi-round LLM agent and does not require a structured data response. These are first-class 
 expressions in the language, composing with \texttt{let} and 
 \texttt{var} bindings, \texttt{if}, \texttt{while}, \texttt{for}, 
-and inline JavaScript (\texttt{js}).
+and standard arithmetic and field projections.
+
+\input{figures/car_scorer}
 
 \paragraph{Types and policies (Figure~\ref{fig:clinical-trial}).}
-Line~5 binds \texttt{crf} with a \texttt{Schema} annotation. When 
-the LLM delivers the schema the interpreter resolves it and 
+Line~5 binds identifier \texttt{crf} with a \texttt{Schema} annotation, a special
+\pact type indicating the type-of-types expressed as a JSON schema description (draft 2020-12~\cite{jsonschema2020}).
+The LLM delivers the schema, the interpreter resolves it and 
 re-checks the remainder of the program against the concrete shape. 
-If any field accessed later, such as \texttt{visit.cost} or 
-\texttt{visit.patient\_id} in the \texttt{for} loop, is absent 
-from the generated schema, a forward syntactic field-access 
-analysis over the let-gen continuation triggers a heal step 
-(Appendix~\ref{app:aux-defs}). The runtime then appends a 
-missing-field error event and retries the same gen redex. The 
+If any \texttt{crf}-typed record has a field accessed later, such as \texttt{visit.cost} or 
+\texttt{visit.patient\_id}, forward syntactic field-access 
+analysis over the let-gen continuation triggers a validation step.
+On validation failure, the runtime appends a 
+missing-field error event and retries the same \texttt{gen} call---we detail
+self-healing in the next paragraph. Note, the 
 analysis is sound but over-approximate, meaning a projection in a 
 never-taken branch still forces the oracle to supply that field. 
 Refining to a path-sensitive analysis is future work. Line~6 introduces
@@ -52,6 +55,7 @@ principal \texttt{root}.
 self-healing budget (\sect{sec:design-gradual}), so that on any 
 validation failure the runtime re-invokes the causal \texttt{gen} 
 with the violated constraint appended to the original prompt.
+
 
 \paragraph{Self-healing in detail.}
 It is worth tracing the self-healing episode in 
@@ -81,7 +85,9 @@ visits, the same structural error is caught three separate times,
 and three separate retries consume tokens. \pact repairs the 
 schema once at the source, before any dependent generation has 
 run, and all subsequent visit generations conform on their first 
-attempt.
+attempt. This also does not require adding assertions, simply
+use LLM generated values as if they are correctly typed, and let the runtime
+self-heal against the context.
 
 \paragraph{Workflow generation (Figure~\ref{fig:overview-workflow}).}
 Agentic workflows often delegate subtasks whose structure is 
@@ -104,7 +110,7 @@ workflow-generating \texttt{gen}, not the caller.
 The generated workflow appears in Figure~\ref{fig:overview-workflow}(b). 
 It takes a single car record, calls \texttt{gen} three times to 
 obtain numeric ratings for comfort, cost, and safety, and averages 
-them via a \texttt{js} expression. The outer workflow calls this 
+them via an arithmetic expression. The outer workflow calls this 
 scorer three times inside a \texttt{while} loop, updating the 
 running best score and best car name on each iteration. The 
 important point is that the outer workflow never specifies how 
@@ -112,4 +118,3 @@ scoring works. It only declares the type the scorer must satisfy.
 The LLM fills in the scoring logic, and \pact enforces the 
 declared type contract at the point where that logic is first put 
 to use.
-\input{figures/car_scorer}

@@ -1,16 +1,16 @@
 \section{Introduction}
 \label{sec:intro}
 
-Modern agents write substantial programs. A single agent run now
-sequences many gen calls, branches on intermediate results, accumulates
+Modern LLM agents author and execute substantial programs, containing arithmetic, IO and even other LLM calls.
+A single agent prompt sequences many LLM calls, branches on intermediate results, accumulates
 mutable state, and delegates subtasks to other agents. The volume of
-code an agent authors grows with every model generation, but safety
-does not. A workflow of ten gen calls receives no more type discipline
-than a one shot prompt, and authorization, when enforced at all, is
-applied at the outer boundary rather than at each call. Gen outputs
-flow from one call to the next with no check that their shape matches
-what downstream code expects, and sensitive gens can be invoked from
-within a workflow with no evidence that the invocation was authorized.
+code written by agents grows with every model generation, but safety
+does not. A workflow comprising tens of LLM calls has no more guardrails
+than a one-shot prompt, and any intermediate failure leaves the system
+in an uncertain IO state, with partial results and wasted tokens. LLM outputs
+flow from one call to the next with no check that they structurally match
+what downstream code expects. Authorization of LLM calls is all-or-nothing, 
+with no granular control over what system resources are accessed or what operations are performed.
 As agents are trusted with more consequential work such as filling
 forms, querying sensitive records, and generating other agents, safety
 must scale with the size of the workflow rather than lag behind it.
@@ -18,16 +18,16 @@ Moreover, when a type or policy violation occurs deep in a long running
 workflow, crashing and restarting from scratch wastes all prior
 computation and multiplies token cost, a problem that compounds as
 workflows grow longer and the probability of at least one structural
-failure approaches certainty. The core observation is that agentic
-plans are programs. If plans are programs, then type systems, static
-analysis, and authorization semantics should apply directly, and
-structural errors can be caught early enough that a single repair at
-the source replaces what would otherwise be a separate retry for every
-dependent call.
+failure increases. To address these issues we present \sys. 
+Our core observation is that \emph{agentic plans are programs}. If plans are programs, then programming
+language techniques for identifying errors such as type systems and capability based
+authorization should apply directly. Moreover, if errors can be identified
+then perhaps LLM agents can also dynamically recover and repair them before
+they cascade into downstream failures.
 
-Today developers express these plans using orchestration frameworks
+Existing works express agentic plans using orchestration frameworks
 such as LangChain~\cite{langchain2022} or ad hoc Python scripts. These
-approaches treat plans as configurations of library objects where gen
+approaches treat plans as configurations of library objects where LLM
 calls return untyped data, control flow is scattered across callback
 edges, structural errors surface only at runtime, and authorization is
 applied at the outer boundary rather than per invocation. When errors
@@ -40,40 +40,14 @@ provides constrained decoding for individual LLM outputs but does not
 track types across calls or enforce per invocation authorization. DSPy
 offers module level signatures but operates at training time rather
 than per invocation and lacks a recovery mechanism when generated
-outputs fail to conform. Neither integrates a type system for gen
-outputs with per invocation authorization and structured self healing.
-Yue et al.~\cite{yue2026statictemplatesdynamicruntime} identify the
+outputs fail to conform. Neither integrates a formal type system, nor a way
+to recover from structural errors, and neither is designed to support the scale of
+workflows that are becoming common in practice. The closest prior work is
+Yue et al.~\cite{yue2026statictemplatesdynamicruntime} who identify the
 tension between expressivity and verifiability as a central open
 problem in this space.
 
-The central failure mode is not merely that an LLM output may be
-malformed, but that a single malformed generated artifact can invalidate
-many future steps. If an LLM-generated schema omits a field used by
-$m$ downstream calls, a conventional assertion-based workflow may
-discover the same defect only after each dependent call has already
-spent tokens producing an unusable result. Likewise, if a generated
-workflow or policy is invalid, late failure forces the system either to
-abort the whole run or to retry from an imprecise downstream symptom.
-The right repair target is therefore the \emph{causal generator}: the
-gen call that produced the schema, workflow, or policy on which the
-future computation depends. This observation makes validation both a
-correctness mechanism and a cost-control mechanism.
-
 \input{figures/clinical_trial}
-
-Figure~\ref{fig:clinical-trial} illustrates the central idea.
-A single workflow generates both a schema and an authorization
-policy at runtime, and \pact{} rechecks downstream code against
-both before any patient data is collected. When the generated
-schema is missing a field that later code needs (such as
-\texttt{visit.cost}), the runtime detects the mismatch while checking
-the continuation of the schema-producing binding and retries the
-schema generation with the type error as feedback. The repair is
-therefore applied once at the source of the defect, rather than
-separately after each downstream visit generation has already consumed
-tokens. Because the repair happens before any visit data is generated, no dependent
-outputs are discarded and the workflow continues from where it
-left off.
 
 We present \sys{} (Programmatic Agent Controlled Types), a
 strongly typed imperative DSL for composing long running agentic
@@ -87,38 +61,56 @@ let a gen produce a complete workflow invoked via \texttt{eval}.
 \texttt{Policy} lets a gen produce a Cedar~\cite{cutler2024cedar}
 policy activated via \texttt{enforce} with append only merging.
 Crucially, when validation fails at any of these three sites, \pact{}
-self heals by retrying the causal generator with the violated constraint
+self-heals by retrying the causal generator with the violated constraint
 as feedback, rather than aborting the workflow. This bounded retry discipline is what makes \pact{} suitable for
 long-running tasks. Larger workflows are more likely to encounter at
 least one structurally wrong LLM-produced artifact, so reliability
 depends on localizing and repairing such failures without discarding
-the rest of the run. A workflow that would otherwise crash on a structural mismatch midway
-through processing hundreds of records instead repairs the offending
-output and continues from where it left off, without discarding prior
-results or requiring human intervention.
+the rest of the run. 
+
+The central failure mode is not merely that an LLM output may be
+malformed, but that a single erroneous LLM call may cascade into a series of downstream failures,
+each compounding the cost and unpredictable consequences. 
+For example, an LLM-generated workflow may
+not conform to the schema expected by downstream code which calls it,
+or an LLM-generated object may be missing a field that downstream code relies on.
+Figure~\ref{fig:clinical-trial} illustrates such a scenario in the context of a
+clinical trial workflow. A single workflow generates both a schema and an authorization
+policy at runtime, and \pact rechecks downstream code against
+both before any patient data is collected. When the generated
+schema is missing a field that later code needs (such as
+\texttt{visit.cost}), the runtime detects the mismatch while checking
+the continuation of the schema-producing binding and retries the
+schema generation with the type error as feedback. The repair is
+therefore applied once at the source of the defect, rather than
+separately after each downstream visit generation has already consumed
+tokens. Because the repair happens before any visit data is generated, no dependent
+outputs are discarded and the workflow continues from where it
+left off.
 
 \textbf{Contributions.}
-(1)~We design \pact{}, an imperative DSL in which
-\texttt{ask}/\texttt{say}/\texttt{gen}/\texttt{agent} are first class
-typed expressions with two-tier Cedar authorization --- a static
-principal-declaration check at every \texttt{gen}/\texttt{agent} and
-a runtime file/directory monitor for the operations agents actually
-perform --- implemented in Rust. Per step soundness is mechanized in
-Lean~4, sorry free and depending only on the standard meta axioms.
-(2)~We introduce \emph{gradual validation}, a staged checking
+\begin{enumerate}
+    \item We design and implement \pact{}, an imperative DSL for well-typed, higher-order
+agentic workflows, with authorization primitives based on Cedar~\cite{cutler2024cedar}.
+\pact{} is implemented in Rust leveraging the Copilot SDK~\cite{CopilotSDKRust2026} and has its formal semantics and type soundness mechanized.
+    \item We introduce \emph{gradual validation}, a staged programming
 discipline in which types, workflows, and authorization policies
-produced by LLMs at runtime are checked against their declared types at
-use time, under the same type system that governs the rest of the
-program. All three forms share a feedback driven retry that reruns the
-causal generator when validation fails, enabling long running workflows
-to self heal rather than crash on structural mismatches.
-(3)~We demonstrate that gradual validation has measurable practical
-benefits beyond correctness. By catching structural mismatches at the
-earliest possible point in the workflow rather than after dependent
-outputs have been generated, \pact{} reduces output token consumption
-nearly threefold compared to assertion based baselines in our clinical
-trial evaluation (1{,}732 vs.\ 4{,}605 output tokens), while
-completing in roughly half the wall clock time.
+produced by LLMs at runtime, are checked against their call-sites in the rest of the
+program, catching structural errors before they cascade into downstream failures. 
+We introduce \emph{self-healing}, a recovery mechanism that automatically retries the causal generator of a failed validation with the error as feedback, rather than crashing the workflow.
+    We formalize self-healing up to a number of retries ($N$) and prove that this discipline is 
+    sound, assuming the LLM gives \emph{eventually correct} results.
+    \item We implement the \pact{} runtime system, which interleaves computation and agentic calls and performs runtime monitoring of resource
+    access based on the enforced policies, and we evaluate it on two realistic
+    workflows. We show that gradual validation with self-healing has practical
+    benefits beyond correctness: by catching structural mismatches at the
+    earliest possible point, \pact{} reduces output token consumption nearly
+    threefold compared to assertion based baselines in our clinical trial
+    evaluation (1{,}732 vs.\ 4{,}605 output tokens), while completing in roughly
+    half the wall clock time. Output token cost is the primary driver of
+    monetary cost in LLM workflows, so this improvement is significant for real
+    world applications.
+\end{enumerate}
 
 The remainder of this paper is organized as follows.
 Section~\ref{sec:overview} presents the language through motivating

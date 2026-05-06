@@ -34,7 +34,7 @@
   morekeywords=[1]{workflow},
   keywordstyle=[1]\bfseries\color{black},
   % Expressions (class 2): dark green bold
-  morekeywords=[2]{let, var, restrict, gen, agent, ask, say, if, else, while, for, in, type, enforce, eval, as, js},
+  morekeywords=[2]{let, var, restrict, gen, agent, ask, say, if, else, while, for, in, type, enforce, eval, as},
   keywordstyle=[2]\bfseries\color{green!50!black},
   % Types (class 3): dark red bold
   morekeywords=[3]{root, Array, String, Number, Bool, Schema, Policy},
@@ -139,7 +139,7 @@
 \newcommand{\Eval}[2]{\texttt{eval}\;#1\,(#2)}
 \newcommand{\Clos}[2]{\lambda(#1).\,#2}
 \newcommand{\Enforce}[1]{\texttt{enforce}\;#1}
-\newcommand{\Js}[1]{\texttt{js}\;#1}
+\newcommand{\Js}[1]{e_{\mathit{pure}}\;#1}
 % Principal introducers. `\Eroot` is the universal principal; `\Erestrict{e}`
 % creates a fresh strictly weaker principal from an existing one.
 \newcommand{\Eroot}{\texttt{root}}

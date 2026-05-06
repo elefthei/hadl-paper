@@ -3,13 +3,48 @@
 \section{Threat Model and Out-of-Scope Concerns}
 \label{app:threat}
 
-\paragraph{Trust boundaries.} \pact treats the programmer-authored program text, the static type checker, the runtime re-checker, and the installed Cedar decision procedure as trusted. It treats every LLM output, whether a value, a schema, a workflow AST, or a policy, as untrusted. The retry budget $\MRetry$ declared by \texttt{@retries} is a bound on how many untrusted attempts the runtime will consume before failing closed on a given generation site.
+\paragraph{Trust boundaries.} \pact treats the programmer-authored program text,
+the static type checker, the runtime re-checker, and the installed Cedar
+decision procedure as trusted. It treats every LLM output, whether a value, a
+schema, a workflow AST, or a policy, as untrusted. The retry budget $\MRetry$
+declared by \texttt{@retries} is a bound on how many untrusted attempts the
+runtime will consume before failing closed on a given generation site.
 
-\paragraph{What is caught.} Validation rejects an LLM output that fails the structural checks of the annotated type: a schema whose $\sigma$-image is not representable, a workflow AST that fails to type-check at its use site, or a generated Cedar policy that fails the install discipline (effect must be \texttt{forbid} for every rule, and no rule may target \texttt{root}). Every \texttt{gen} and \texttt{agent} invocation carries the static premise $\PrinDeclared{\MPol}{\MPrin}$ --- the principal named by the surrounding \texttt{as} clause (or $\texttt{root}$ by default) is declared in the current policy state. The action and resource of any specific filesystem access are checked just-in-time by the runtime monitor of \sect{sec:implementation}; a deny becomes an $\ErrEv{\cdot}$ event and triggers retry. The two install premises together guarantee that no \texttt{enforce} step can relax an already-installed restriction or revoke \texttt{root}'s authority.
+\paragraph{What is caught.} Validation rejects an LLM output that fails the
+structural checks of the annotated type: a schema whose $\sigma$-image is not
+representable, a workflow AST that fails to type-check at its use site, or a
+generated Cedar policy that fails the install discipline (effect must be
+\texttt{forbid} for every rule, and no rule may target \texttt{root}). Every
+\texttt{gen} and \texttt{agent} invocation carries the static premise
+$\PrinDeclared{\MPol}{\MPrin}$ --- the principal named by the surrounding
+\texttt{as} clause (or $\texttt{root}$ by default) is declared in the current
+policy state. The action and resource of any specific filesystem access are
+checked just-in-time by the runtime monitor of \sect{sec:implementation}; a deny
+blocks the operation and fails closed. The two install premises together
+guarantee that no \texttt{enforce} step can relax an already-installed
+restriction or revoke \texttt{root}'s authority.
 
 \begin{sloppypar}
-\paragraph{What is not caught.} The runtime monitor's Cedar requests use \texttt{Action} $\in \{\texttt{Read}, \texttt{Write}, \texttt{Exec}\}$ and \texttt{Resource} ranging over files and directories the agent actually touches; wildcards \texttt{*} are supported. Authorization decisions therefore depend on which file an agent ultimately reads or writes, not on the call site of the \texttt{gen}/\texttt{agent} expression. Four categories of threat remain outside the model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen} call whose prompt is composed with untrusted \texttt{ask} input can still be steered by an adversary who controls the user, even though every actual filesystem access is policy-checked. Second, \emph{semantic misalignment} of generated policies: the install discipline filters out rules that are syntactically out of bounds, but an LLM-generated policy that is merely \emph{over-permissive} with respect to operator intent will install and appear well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an already-authorized workflow emits sensitive values to the human. Fourth, \emph{side-effecting js blocks}, which execute arbitrary JavaScript under the host runtime's ambient authority. These gaps are out of scope for gradual validation as we define it; the install discipline prevents policy relaxation but cannot recover from a malicious or inappropriate \emph{initial} policy.
-\end{sloppypar}
+\paragraph{What is not caught.} The runtime monitor's Cedar requests use
+\texttt{Action} $\in \{\texttt{Read}, \texttt{Write}, \texttt{Exec}\}$ and
+\texttt{Resource} ranging over files and directories the agent actually touches;
+wildcards \texttt{*} are supported. Authorization decisions therefore depend on
+which file an agent ultimately reads or writes, not on the call site of the
+\texttt{gen}/\texttt{agent} expression. Four categories of threat remain outside
+the model. First, \emph{prompt injection} against the LLM itself: a \texttt{gen}
+call whose prompt is composed with untrusted \texttt{ask} input can still be
+steered by an adversary who controls the user, even though every actual
+filesystem access is policy-checked. Second, \emph{semantic misalignment} of
+generated policies: the install discipline filters out rules that are
+syntactically out of bounds, but an LLM-generated policy that is merely
+\emph{over-permissive} with respect to operator intent will install and appear
+well-formed. Third, \emph{data exfiltration} via \texttt{say}, where an
+already-authorized workflow emits sensitive values to the human. Fourth,
+\emph{side-effecting host-language expressions}, which execute arbitrary
+JavaScript under the host runtime's ambient authority. These gaps are out of
+scope for gradual validation as we define it; the install discipline prevents
+policy relaxation but cannot recover from a malicious or inappropriate
+\emph{initial} policy.  \end{sloppypar}
 
 \section{Type-System Limitations}
 \label{app:limitations}
@@ -17,41 +52,89 @@
 \subsection{Gradual-validation details}
 \label{app:gradual-detail}
 
-\paragraph{Schema-to-type mapping.} When a \texttt{Schema} value materializes, the interpreter applies a mapping $\sigma$ that sends \texttt{null} to \texttt{()}, \texttt{boolean} to \texttt{Bool}, \texttt{integer}/\texttt{number} to \texttt{Number}, \texttt{string}/\texttt{enum} to \texttt{String}, and compound schemas (\texttt{array}/\texttt{object}/\texttt{\$ref}) back to \texttt{Schema}, then registers the result in the type environment so a \texttt{Schema}-typed variable may appear in annotation position (e.g.\ \texttt{let booking: form\_schema = gen "..."}).
+\paragraph{Schema-to-type mapping.} When a \texttt{Schema} value materializes,
+the interpreter applies a mapping $\sigma$ that sends \texttt{null} to
+\texttt{()}, \texttt{boolean} to \texttt{Bool}, \texttt{integer}/\texttt{number}
+to \texttt{Number}, \texttt{string}/\texttt{enum} to \texttt{String}, and
+compound schemas (\texttt{array}/\texttt{object}/\texttt{\$ref}) back to
+\texttt{Schema}, then registers the result in the type environment so a
+\texttt{Schema}-typed variable may appear in annotation position (e.g.\
+\texttt{let booking: form\_schema = gen "..."}).
 
-\paragraph{Re-checking discipline.} Re-checking after materialization verifies downstream bindings against the resolved type. If a downstream field access or annotation fails to type-check and \texttt{@retries} is active, the runtime re-invokes the causal \texttt{gen} call with the type error as feedback. The same loop applies to workflow and policy generation: a continuation that fails to type-check, an \texttt{eval} site whose argument types disagree with the materialized arrow, or a Cedar parse failure each appends a feedback event and re-invokes the causal \texttt{gen}.
+\paragraph{Re-checking discipline.} Re-checking after materialization verifies
+downstream bindings against the resolved type. If a downstream field access or
+annotation fails to type-check and \texttt{@retries} is active, the runtime
+re-invokes the causal \texttt{gen} call with the type error as feedback. The
+same loop applies to workflow and policy generation: a continuation that fails
+to type-check, an \texttt{eval} site whose argument types disagree with the
+materialized arrow, or a Cedar parse failure each appends a feedback event and
+re-invokes the causal \texttt{gen}.
 
-\paragraph{Workflow generation.} The entire \pact{} AST is serializable, so an arrow-typed \texttt{gen} produces a JSON-serialized \texttt{Program}. \texttt{eval} deserializes, validates argument and return types against the workflow type, and executes the result with closure-like semantics in the caller's environment.
+\paragraph{Workflow generation.} The entire \pact{} AST is serializable, so an
+arrow-typed \texttt{gen} produces a JSON-serialized \texttt{Program}.
+\texttt{eval} deserializes, validates argument and return types against the
+workflow type, and executes the result with closure-like semantics in the
+caller's environment.
 
-\paragraph{Policy generation.} A \texttt{Policy}-annotated binding stores the policy without activating it; the explicit \texttt{enforce} expression installs it, and because \texttt{enforce} is an ordinary expression it can appear inside conditional branches (enabling human-in-the-loop approval).
+\paragraph{Policy generation.} A \texttt{Policy}-annotated binding stores the
+policy without activating it; the explicit \texttt{enforce} expression installs
+it, and because \texttt{enforce} is an ordinary expression it can appear inside
+conditional branches (enabling human-in-the-loop approval).
 
 \subsection{Restrictions of the type system}
 
-The type system deliberately makes several simplifications to keep gradual validation tractable.
+The type system deliberately makes several simplifications to keep gradual
+validation tractable.
 
-\begin{itemize}
-  \item \textbf{Arrays are homogeneously element-typed.} \texttt{array[T]} requires every element to have type $T$; there are no tuple types and no heterogeneous arrays.
-  \item \textbf{Records check declared fields only.} A record type $\{\overline{x_i{:}T_i}\}$ requires every listed field to be present with the listed type, but the runtime value may carry additional fields. There is no row polymorphism, no width subtyping beyond the \texttt{Schema}-as-top rule, and no structural subtyping between record types.
-  \item \textbf{No unions or intersections.} There are no sum types, union types, or refinement types. Values whose shape depends on runtime choice must flow through \texttt{Schema} and be re-checked at use.
-  \item \textbf{\texttt{Schema} is top during static checking.} Both $T \le \texttt{Schema}$ and $\texttt{Schema} \le T$ hold for every $T$, so a \texttt{Schema}-typed value passes every static field-access and \texttt{eval} check; field-level validity is deferred to the post-materialization re-checker and, for compound schemas that $\sigma$ maps back to \texttt{Schema}, to the JavaScript engine at runtime.
-  \item \textbf{\texttt{js} blocks are oracular.} Inline \texttt{js} expressions produce a value whose runtime type is admitted directly by \texttt{StType}; the \pact type checker does not model the JS type lattice.
-  \item \textbf{No parametric polymorphism.} Workflow signatures are monomorphic.
-\end{itemize}
+\begin{itemize} \item \textbf{Arrays are homogeneously element-typed.}
+\texttt{array[T]} requires every element to have type $T$; there are no tuple
+types and no heterogeneous arrays.  \item \textbf{Records check declared fields
+only.} A record type $\{\overline{x_i{:}T_i}\}$ requires every listed field to
+be present with the listed type, but the runtime value may carry additional
+fields. There is no row polymorphism, no width subtyping, and no structural
+subtyping between record types.  \item \textbf{No unions or intersections.}
+There are no sum types, union types, or refinement types. Values whose shape
+depends on runtime choice must flow through \texttt{Schema} and be re-checked at
+use.  \item \textbf{\texttt{Schema} defers structural checking.} \texttt{Schema}
+is the type of types: a \texttt{Schema}-typed binding carries no structural
+information during static checking. Field-level validity is deferred to the
+post-materialization re-checker, which resolves the concrete shape and re-checks
+the continuation. For compound schemas that $\sigma$ maps back to
+\texttt{Schema}, field access is resolved at runtime by the host engine.  \item
+\textbf{Host-language expressions are oracular.} Arithmetic, field projections,
+and comparisons are evaluated by the embedded JavaScript engine (Boa); the \pact
+type checker does not model the JS type lattice.  \item \textbf{No parametric
+polymorphism.} Workflow signatures are monomorphic.  \end{itemize}
 
 \section{Baseline Comparison Details}
 \label{app:baselines}
 
 Qualitative comparison between \pact and the three baselines on the clinical-trial workflow.
 
-\begin{description}
-  \item[Language-level type discipline.] \begin{sloppypar}\pact enforces structural types on \texttt{gen} outputs at declaration sites and rechecks after materialization. LangGraph carries no type information between nodes beyond programmer-authored Python annotations. LMQL constrains the \emph{shape} of a single LLM output at decoding time but does not track the type across calls. DSPy's signature syntax is the closest in spirit but operates at the module level, not the workflow level.\end{sloppypar}
-  \item[Per-invocation authorization.] \begin{sloppypar}\pact's \texttt{enforce} + \texttt{as}-clause pattern statically requires the principal to be declared in $\mathrm{dom}(\MPol)$ at every \texttt{gen}/\allowbreak\texttt{agent} site, and routes the resulting file/directory operations through a runtime Cedar monitor with $\mathsf{Read}/\mathsf{Write}/\mathsf{Exec}$ actions. In the three baselines, authorization is either at the process boundary or authored by hand in the node body; no baseline supports a forbid-only, root-safe install discipline that monotonically shrinks the allow-set.\end{sloppypar}
-  \item[Self-healing discipline.] \pact's retry is driven by the violated constraint itself (type shape, Cedar denial) which is written back into the prompt. DSPy includes a feedback mechanism through its optimizer, but it operates at training time rather than per-invocation. LangGraph and LMQL have no built-in typed retry.
-  \item[Formal guarantees.] \pact has a mechanized per-step soundness (\sect{sec:sem-correctness}). The baselines have no formal model.
+\begin{description} \item[Language-level type discipline.]
+\begin{sloppypar}\pact enforces structural types on \texttt{gen} outputs at
+declaration sites and rechecks after materialization. LangGraph carries no type
+information between nodes beyond programmer-authored Python annotations. LMQL
+constrains the \emph{shape} of a single LLM output at decoding time but does not
+track the type across calls. DSPy's signature syntax is the closest in spirit
+but operates at the module level, not the workflow level.\end{sloppypar}
+\item[Per-invocation authorization.] \begin{sloppypar}\pact's \texttt{enforce} +
+\texttt{as}-clause pattern statically requires the principal to be declared in
+$\mathrm{dom}(\MPol)$ at every \texttt{gen}/\allowbreak\texttt{agent} site, and
+routes the resulting file/directory operations through a runtime Cedar monitor
+with $\mathsf{Read}/\mathsf{Write}/\mathsf{Exec}$ actions. In the three
+baselines, authorization is either at the process boundary or authored by hand
+in the node body; no baseline supports a forbid-only, root-safe install
+discipline that monotonically shrinks the allow-set.\end{sloppypar}
+\item[Self-healing discipline.] \pact's retry is driven by the violated type
+constraint (type shape mismatch) which is written back into the prompt. DSPy
+includes a feedback mechanism through its optimizer, but it operates at training
+time rather than per-invocation. LangGraph and LMQL have no built-in typed
+retry.  \item[Formal guarantees.] \pact has a mechanized per-step soundness
+(\sect{sec:sem-correctness}). The baselines have no formal model.
 \end{description}
 
-\section{Full Reduction Rules}
-\label{app:rules}
+\section{Full Reduction Rules} \label{app:rules}
 
 This appendix lists the reduction rules elided from \sect{sec:sem-reduction} --- the remaining pure-core root rules, the ask/say rules, closure application, and the structural congruence rules --- followed by the proofs of Theorems~\ref{thm:pact-soundness}, \ref{thm:pact-progress}, and \ref{thm:pact-term}. Left-to-right call-by-value evaluation order is enforced throughout by the structural congruence rules. The substitution $\Subst{e}{v}$ denotes the capture-avoiding substitution of $v$ for $x$ in $e$; for a closure with parameters $\overline{x_i}$, simultaneous substitution $e[\overline{v_i/x_i}]$ is used.
 
@@ -195,12 +278,9 @@ types such as $\Tarr{\Tschema}$ from the clinical-trial
 form the type-driven self-heal pattern. All such rules require an
 authorized principal and a well-typed $v$; they diverge on whether the
 \emph{continuation} $p$ type-checks under $\Gext{x}{\tau}$. On success
-the heal context is flushed and $\Subst{p}{v}$ commits via the
-capture-avoiding substitution that $\rulename{Let-Bind}$ and closure
-application already use --- for $\Tarrow{\cdots}{\cdot}$ this is
-higher-order substitution of a workflow value into the continuation,
-mechanized in Lean via the
-\texttt{lean-subst} framework. On continuation failure the returned
+the heal context is flushed and $\Subst{p}{v}$ commits via
+capture-avoiding substitution (for $\Tarrow{\cdots}{\cdot}$, this
+substitutes a workflow value into the continuation). On continuation failure the returned
 $\epsilon$ is appended so the next oracle call reads the precise
 continuation mismatch produced by the check; budget exhaustion at a
 healable $\tau$ steps to $\errV$ via $\rulename{Gen-Budget}$. Under
@@ -208,8 +288,7 @@ truthful $\mathcal{O}$, T4c shows that $\rulename{Healable-Ok}$ or
 $\rulename{Healable-Heal}$ fires within budget; the runtime never
 observes a stall at a healable $\tau$ given an authorized principal.
 The Policy case is handled by the parametric pair, since
-$\Healable{\Tpolicy} = \mathsf{true}$, and is mechanized as
-$\mathtt{T4\_progress\_gen\_policy}$.
+$\Healable{\Tpolicy} = \mathsf{true}$, and follows as a corollary of the parametric healable-progress lemma.
 \end{sloppypar}
 
 \begin{sloppypar}
@@ -223,8 +302,8 @@ $|\MErr|$: every entry is an $\ErrEv{\cdot}$, and a successful oracle
 step flushes $\MErr$ to $\emptyset$, so the count resets to zero
 naturally. The premise $\InstallOk{p}$ holds when every rule of $p$ has
 effect \texttt{forbid} and no rule targets \texttt{root};
-$\Install{\MPol}{p}$ then merges $p$ with $\MPol$ and
-$\mathtt{policyInstall\_shrinks}$ guarantees
+$\Install{\MPol}{p}$ then merges $p$ with $\MPol$ and the
+policy-install monotonicity lemma guarantees
 $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
 \end{sloppypar}
 
@@ -258,11 +337,8 @@ $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
   {\mathsf{isValue}(v)}
   {\MConfig{\MErr}{\MPol}{\Seq{v}{e}} \step \MConfig{\MErr}{\MPol}{e}}
 
-\inferrule*[right=\rulename{Js}]
-  {\mathsf{jsEval}(c) = v \\ \mathsf{isValue}(v)}
-  {\MConfig{\MErr}{\MPol}{\Js{c}} \step \MConfig{\MErr}{\MPol}{v}}
 \end{mathpar}
-\caption{Pure-core CBV rules: conditionals, loops, sequencing, and \texttt{js} evaluation.}
+\caption{Pure-core CBV rules: conditionals, loops, and sequencing. Arithmetic, comparisons, and field projections are evaluated by the embedded JavaScript engine (\sect{sec:implementation}).}
 \label{fig:rules-core-l1}
 \end{figure*}
 
@@ -327,7 +403,16 @@ $\rulename{Eval-Success}$ applies a closure $\Clos{\overline{x_i}}{e_b}$ to a li
 
 A configuration that lacks an outgoing transition is terminal; the language has no $\mathsf{errTerm}$ constructor, so stuckness is detected by exhausting the rule set rather than by an explicit error term. The fail-closed sink $\errV$ is a value (so $\mathsf{isValue}(\errV)$ and the configuration is terminal) and carries no runtime type by design --- T2 below excludes it from the typeable-value statement.
 
-There is one self-heal pattern per kind of materialization. The let-centric $\rulename{Schema-Heal}$ together with the parametric $\rulename{Healable-Heal}$ (which uniformly covers Arrow and Policy targets via $\Healable{\Tarrow{\cdots}{\cdot}}$ and $\Healable{\Tpolicy}$), and the uniform $\rulename{Gen-PolHeal}$, $\rulename{Gen-TypeErr}$, $\rulename{Gen-Budget}$ together cover every \texttt{gen} self-heal path; $\Agent{\cdot}{\cdot}$ is covered by $\rulename{Agent-Success}$ and $\rulename{Agent-PolHeal}$. The plain $\Enforce{\cdot}$ form has no separate heal rule: a $\Tpolicy$ value that fails to install is delivered by an outer healable \texttt{let}, which retries via $\rulename{Healable-Heal}$ at $\Tpolicy$. Closure application has no oracle component, so it needs none.
+There is one self-heal pattern per kind of materialization. The let-centric
+$\rulename{Schema-Heal}$ together with the parametric $\rulename{Healable-Heal}$
+(which uniformly covers Arrow and Policy targets), and the rules
+\allowbreak$\rulename{Gen-PolHeal}$, \allowbreak$\rulename{Gen-TypeErr}$,
+\allowbreak$\rulename{Gen-Budget}$ together cover every \texttt{gen} self-heal
+path; $\Agent{\cdot}{\cdot}$ is covered by $\rulename{Agent-Success}$ and
+\allowbreak$\rulename{Agent-PolHeal}$. The plain $\Enforce{\cdot}$ form has no
+separate heal rule: a $\Tpolicy$ value that fails to install is delivered by an
+outer healable \texttt{let}, which retries via $\rulename{Healable-Heal}$ at
+$\Tpolicy$. Closure application has no oracle component, so it needs none.
 
 \subsection{Mutable-State Rules}
 \label{app:rules-mut}
@@ -367,31 +452,40 @@ $\rulename{VarDecl-Bind}$ and $\rulename{Assign-Write}$ carry the runtime-type s
 \label{app:proofs}
 \label{app:soundness}
 
-\paragraph{T2 typeable-value witness.} T2 ranges over committed values $v$ with $v \neq \errV$; it produces a runtime-type witness $\StType{v}{\tau}$ for every reduction that lands a non-sink value at the expression slot. The mechanization assigns runtime types to closures, records, and arrays via dedicated $\mathtt{vClos}/\mathtt{vRec}/\mathtt{vArr}$ constructors that black-box structural content (closure body shape, record field types, array element type are existentially witnessed); the $\StType{v}{\Tschema}$ premise of $\rulename{Schema-Ok}$ provides the annotated witness at oracle materialization. The fail-closed sink $\errV$ is excluded by the hypothesis $v \neq \errV$ because, by design, $\errV$ carries no runtime type --- it is the terminal value produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ to signal that the present site cannot be repaired.
+Each proof is by induction on the derivation of $C \step C'$, case-splitting on
+the step constructor.
 
-\begin{sloppypar}
-\paragraph{T4a as a non-redex statement.} $\Gen{\tau}{s}{\MPrin}$ is materialized only inside a $\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{p}$ redex, so a standalone $\Gen{\tau}{s}{\MPrin}$ has no transition at any heal context (independent of the budget). Materialization happens within a healable \texttt{let}, where $\rulename{Gen-Budget}$ converts an over-budget heal context to the fail-closed sink $\errV$ uniformly across all $\tau$. T4b/T4c cover Schema, arrow, and Policy types; the analogous $\mathtt{T4\_truthful\_success\_arrow}$ and $\mathtt{T4\_progress\_gen\_policy}$ are mechanized in Lean as 1-line corollaries of the parametric \allowbreak$\mathtt{T4\_truthful\_success\_gen\_healable}$ / $\mathtt{T4\_progress\_gen\_healable}$.
-\end{sloppypar}
+\paragraph{Scope.} T1--T4c are mechanized and depend only on standard
+meta-axioms; a build-time guard rejects any further axiom. The trace-level
+termination argument (Theorem~\ref{thm:pact-term}) is prose-only, though its
+per-step ingredients are mechanized. Progress is conditional on the oracle
+assumption: when $\mathcal{O}$ is eventually-truthful, T4c fires
+$\rulename{Healable-Ok}$ within budget; otherwise the trace commits, sinks to
+$\errV$, or pauses at an oracle redex. Static type checking is black-boxed; the
+Rust type checker is not part of the mechanized artifact. The threat-model gaps
+of \sect{sec:design-threat} are outside the scope of soundness.
 
-\paragraph{Termination sketch (paper-only).} Termination (Theorem~\ref{thm:pact-term}) is argued on paper: between oracle firings only pure-core rules fire, which terminate under the loop assumption; at each oracle firing either $\MErr$ is flushed to $\emptyset$ (success) or an $\ErrEv{\cdot}$ extends it by one (heal), bounding heals by $\MRetry$ per site. $\rulename{Gen-Budget}$ terminates the run at the first over-budget configuration by stepping to $\errV$; $\rulename{Gen-TypeErr}$ does the same at non-healable $\tau$. At a healable $\tau$ with eventually-truthful $\mathcal{O}$, T4c witnesses that $\rulename{Healable-Ok}$ fires within $\MRetry+1$ heals and the configuration commits via $\Subst{p}{v}$; absent that assumption, the trace either commits, sinks to $\errV$ via $\rulename{Gen-Budget}$, or pauses at the same site awaiting the next oracle response.
-
-\paragraph{Scope of the formal results.} T1--T4c are mechanized in Lean~4, sorry-free and depending only on the standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$; a build-time guard breaks the build on any further axiom. The trace-level termination argument is prose-only --- its per-step ingredients (heal-bound, success-flush, and budget-sink) are mechanized. Progress is conditional on the oracle assumption: when $\mathcal{O}$ is eventually-truthful, T4c fires $\rulename{Healable-Ok}$ within budget; otherwise the trace commits, sinks to $\errV$, or pauses at an oracle redex awaiting the next response, and no ill-formed configuration is reachable. Static type checking is black-boxed (only reflexivity cases appear in proofs); the Rust type checker is not part of the Lean artifact. The threat-model gaps of \sect{sec:design-threat} --- prompt injection, semantic policy misalignment, \texttt{say}-based exfiltration, and \texttt{js} side effects --- are outside the scope of soundness. Practical claims beyond staged type safety and policy monotonicity per step are the subject of \sect{sec:evaluation}.
-
-\begin{sloppypar}
-Each proof is an induction on the derivation of $C \step C'$, mirroring the Lean case split on the constructor of $\mathtt{Step}$. The mechanization is free of user-introduced axioms: $\mathtt{policyInstall\_shrinks}$ is proved by iterated application of Cedar-Lean's \allowbreak$\mathtt{unchanged\_deny\_when\_add\_forbid}$ theorem, and the JavaScript host evaluator is modelled by an opaque $\mathtt{jsEval} : \mathtt{JsExpr} \to \mathsf{Option}\;\mathtt{Value}$ whose stub implementation returns $\mathsf{none}$; consequently the Lean \allowbreak$\mathtt{jsEval\_wellTyped}$ lemma is vacuous, and the paper-level ``oracular \texttt{js}'' story is not yet axiomatized --- a faithful axiomatization would replace the stub with a single $\mathtt{js\_oracular}$ axiom and add it to the build-time axiom allowlist. The policy-install operation $\Install{\cdot}{\cdot}$ is \emph{partial} (Lean's $\mathtt{policyInstall}$ returns $\mathsf{Option}$); the paper's $\MPol' = \Install{\MPol}{p}$ notation is shorthand for ``on the branch where installation succeeds''. All theorems depend only on Lean's standard meta-axioms ($\mathtt{propext}$, $\mathtt{Classical.choice}$, $\mathtt{Quot.sound}$); no other steps are admitted.
-\end{sloppypar}
+\paragraph{Notation.} The policy-install operation $\Install{\cdot}{\cdot}$ is
+\emph{partial}; the notation $\MPol' = \Install{\MPol}{p}$ is shorthand for
+``on the branch where installation succeeds.''
 
 \subsection{T1: WF-preservation}
 \label{app:proof-sound-a}
 
-The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedness clause $\forall~x,\tau,v.\;\MStore(x) = (\tau,v) \Rightarrow \StType{v}{\tau}$. The proof is by cases on the $\mathtt{Step}$ constructor in Lean; the non-trivial cases are:
+The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedness clause $\forall~x,\tau,v.\;\MStore(x) = (\tau,v) \Rightarrow \StType{v}{\tau}$. The proof is by cases on the step constructor; the non-trivial cases are:
 
 \begin{sloppypar}
-\paragraph{Case $\rulename{Ask}$, $\rulename{Agent-Success}$, $\rulename{Gen-Ok}$, $\rulename{Schema-Ok}$, $\rulename{Arrow-Ok}$, $\rulename{Healable-Ok}$.} The target heal context is $\emptyset$; $|\emptyset| = 0 \le \MRetry$ by definition.
+\paragraph{Case $\rulename{Ask}$, $\rulename{Agent-Success}$,
+$\rulename{Gen-Ok}$, $\rulename{Schema-Ok}$, $\rulename{Arrow-Ok}$,
+$\rulename{Healable-Ok}$.} The target heal context is $\emptyset$; $|\emptyset|
+= 0 \le \MRetry$ by definition.
 \end{sloppypar}
 
 \begin{sloppypar}
-\paragraph{Case $\rulename{Schema-Heal}$, $\rulename{Arrow-Heal}$, $\rulename{Healable-Heal}$, $\rulename{Gen-PolHeal}$, $\rulename{Agent-PolHeal}$.} The rule's own premise $|\MErr \cdot \ErrEv{\epsilon}| \le \MRetry$ is exactly the required invariant on $C'$.
+\paragraph{Case $\rulename{Schema-Heal}$, $\rulename{Arrow-Heal}$,
+$\rulename{Healable-Heal}$, $\rulename{Gen-PolHeal}$,
+$\rulename{Agent-PolHeal}$.} The rule's own premise $|\MErr \cdot
+\ErrEv{\epsilon}| \le \MRetry$ is exactly the required invariant on $C'$.
 \end{sloppypar}
 
 \paragraph{Case $\rulename{Gen-TypeErr}$, $\rulename{Gen-Budget}$.} $\MErr$ is unchanged, so the invariant is inherited.
@@ -402,41 +496,85 @@ The invariant is the conjunction $|\MErr| \le \MRetry$ and the store well-typedn
 
 \paragraph{Case $\rulename{VarRead}$.} The store invariant on the input configuration directly supplies $\StType{v}{\tau}$ for the read value; $\MErr$ and $\MStore$ are unchanged.
 
-The Arrow and Policy success/heal cases are covered uniformly by the parametric $\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$ rules and dispatch through the same proof case in $\mathtt{T1\_WF\_preservation}$.
+The Arrow and Policy success/heal cases are covered uniformly by the parametric
+$\rulename{Healable-Ok}$, $\rulename{Healable-Heal}$ rules and dispatch through
+the same proof case.
 
 \subsection{T2: Staged materialization}
 \label{app:proof-sound-b}
 
-\begin{sloppypar}
-If the step $C \step C'$ produces a value $v$ at $C'$'s expression slot \emph{and} $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$. The proof (\allowbreak$\mathtt{T2\_staged\_materialization}$) factors through a value-lemma ``$\mathsf{isValue}(v) \wedge v \neq \errV \Rightarrow \exists~\tau.\ \StType{v}{\tau}$'' that enumerates the value constructors. For base literals and schema/policy values the corresponding $\mathtt{vUnit}$/$\allowbreak\mathtt{vBool}$/$\allowbreak\mathtt{vNum}$/$\allowbreak\mathtt{vStr}$/$\allowbreak\mathtt{vSchema}$/$\allowbreak\mathtt{vPol}$ case applies. For closures, the $\mathtt{vClos}$ rule admits an arrow of matching arity; the T2 witness instantiates arguments and return to $\Tunit$, giving $\tau = \Tarrow{\overline{\Tunit}}{\Tunit}$ --- the precise argument and return types of the body are irrelevant to T2's existential claim. For record and array values, $\mathtt{vRec}$ and $\mathtt{vArr}$ instantiate witnesses at records with an empty field list and arrays of $\Tunit$, again as existential witnesses. The $\errV$ case is excluded by hypothesis: $\errV$ is the fail-closed sink produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ and intentionally has no runtime type, so a configuration whose expression slot is $\errV$ is a terminal failure state, not a typeable value. T2 is the per-step staged materialization claim and applies uniformly at every reduced expression that is not the sink.
-\end{sloppypar}
+If the step $C \step C'$ produces a value $v$ at $C'$'s expression slot and $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$. The proof factors through a value lemma: $\mathsf{isValue}(v) \wedge v \neq \errV \Rightarrow \exists~\tau.\ \StType{v}{\tau}$, which enumerates the value constructors.
+
+\paragraph{Base literals and schema/policy values.} Each base literal carries a canonical runtime type (unit, bool, number, string); schema and policy values carry their respective $\Tschema$ and $\Tpolicy$ witnesses.
+
+\paragraph{Closures.} A closure admits an arrow type of matching arity. The T2 witness instantiates all argument and return types to $\Tunit$, giving $\tau = \Tarrow{\overline{\Tunit}}{\Tunit}$ --- the precise types of the body are irrelevant to T2's existential claim.
+
+\paragraph{Records and arrays.} Record and array constructors instantiate witnesses at an empty field list and element type $\Tunit$, respectively, again as existential witnesses.
+
+\paragraph{$\errV$ exclusion.} The fail-closed sink $\errV$ is excluded by hypothesis. By design, $\errV$ carries no runtime type --- it is the terminal value produced by $\rulename{Gen-TypeErr}$ and $\rulename{Gen-Budget}$ to signal an irreparable failure.
+
+\noindent T2 applies uniformly at every reduced expression that is not the sink.
 
 \subsection{T3: Policy monotonicity}
 \label{app:proof-sound-c}
 
 \begin{sloppypar}
-$\MPol$ is updated only by $\rulename{Enforce-Install}$, whose target policy $\MPol' = \Install{\MPol}{p}$ satisfies $\Allow{\MPol'} \subseteq \Allow{\MPol}$ by $\mathtt{policyInstall\_shrinks}$. All other rules leave $\MPol$ unchanged and give $\Allow{\MPol'} = \Allow{\MPol}$, hence the reflexive subset. The principal-membership check $\MPrin \in \mathrm{dom}(\MPol)$ is the static admissibility premise on the success rules $\rulename{Gen-Ok}$ and $\rulename{Agent-Success}$ (mechanized as $\mathtt{prinDeclared}\;\MPol\;\MPrin$, with default $\MPrin = \mathtt{root}$); $\rulename{Gen-PolHeal}$ and $\rulename{Agent-PolHeal}$ fire on its negation. The action/resource decision over $\mathsf{Read}/\mathsf{Write}/\mathsf{Exec}$ on files and directories is the orthogonal, runtime-only dimension and is enforced by the Copilot CLI monitor, not by the Lean reduction.
+$\MPol$ is updated only by $\rulename{Enforce-Install}$, whose target policy $\MPol' = \Install{\MPol}{p}$ satisfies $\Allow{\MPol'} \subseteq \Allow{\MPol}$ by the policy-install monotonicity lemma. All other rules leave $\MPol$ unchanged, giving $\Allow{\MPol'} = \Allow{\MPol}$ and hence the reflexive subset.
 \end{sloppypar}
 
-\subsection{T4a: No transition for budget-exhausted standalone gen}
+\subsection{T4a: Standalone gen is a non-redex}
 \label{app:proof-prog-a}
 
 \begin{sloppypar}
-T4a is a non-redex statement: $\Gen{\tau}{s}{\MPrin}$ is not a transition head. We case-split on the $\mathtt{Step}$ constructor producing any putative $C \step C'$ from $C = \MConfig{\MErr}{\MPol}{\Gen{\tau}{s}{\MPrin}}$. Every constructor either targets a different syntactic head (the $\mathtt{Enforce\text{-}Install}$, $\mathtt{Eval\text{-}Success}$, $\mathtt{Let\text{-}Bind}$, $\mathtt{Let\text{-}Cong}$, $\rulename{Gen-Ok}$, $\rulename{Schema-Ok}$, $\rulename{Arrow-Ok}$, $\rulename{Healable-Ok}$, $\rulename{Gen-TypeErr}$, $\rulename{Gen-Budget}$, $\rulename{Gen-PolHeal}$, $\rulename{Schema-Heal}$, $\rulename{Arrow-Heal}$, $\rulename{Healable-Heal}$, $\rulename{Agent-Success}$, $\rulename{Agent-PolHeal}$, $\rulename{Ask}$, $\ldots$ rules), or is a congruence rule whose target structure does not match a bare $\Gen{\tau}{s}{\MPrin}$. By constructor distinctness no rule fires, so $C$ has no successor, regardless of the budget. This is mechanized as $\mathtt{T4\_budget\_no\_heal}$; the budget-exhaustion content lives at the surrounding $\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{\cdot}$, where $\rulename{Gen-Budget}$ fires when $|\MErr| > \MRetry$ and converts the configuration to the fail-closed sink $\errV$.
+A bare $\Gen{\tau}{s}{\MPrin}$ is not a transition head: every reduction rule
+targets either a different syntactic form or a congruence context that does not
+match a standalone $\Gen{\tau}{s}{\MPrin}$. By constructor distinctness no rule
+fires, so the configuration has no successor regardless of the budget.
+Materialization always occurs inside a
+$\Let{\tau}{\Gen{\tau}{s}{\MPrin}}{\cdot}$ redex, where
+$\rulename{Gen-Budget}$ fires when $|\MErr| > \MRetry$ and converts the
+configuration to the fail-closed sink $\errV$.
 \end{sloppypar}
 
 \subsection{T4b: Truthful success at Schema}
 \label{app:proof-prog-b}
 
 \begin{sloppypar}
-Fix a let-redex $\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p_0}$ with $\MPrin \in \mathrm{dom}(\MPol)$ and a continuation $p_0$ that is statically well-typed at $\tau'$ under $\Gext{x}{\Tschema}$ (i.e.\ $\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$). By \defn{def:oracle-truthful} there exists some $\MErr'$ with $|\MErr'| \le \MRetry$ and a value $v$ with $\Oracle{s}{\MErr'}{\Tschema} \ni v$, $\mathsf{isValue}(v)$, and $\StType{v}{\Tschema}$. Apply $\rulename{Healable-Ok}$ at $\tau = \Tschema$ (the $\Healable{\Tschema}$ side condition is immediate): all premises are discharged (oracle, $v$:Schema$\Rightarrow$ok, $p_0$:$\tau'\Rightarrow$ok), so $\MConfig{\MErr'}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p_0}} \step \MConfig{\emptyset}{\MPol}{\Subst{p_0}{v}}$. Mechanized as $\mathtt{T4\_truthful\_success}$; the arrow analogue \allowbreak$\mathtt{T4\_truthful\_success\_arrow}$ follows the identical pattern at $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$ (discharged via the universally-quantified \allowbreak$\mathtt{StaticTypeOK.var0}$ witness, which applies to any $\tau$). Both Schema and Arrow specializations dispatch through the single parametric rule $\rulename{Healable-Ok}$ in the Lean reduction relation; the agent variant is \allowbreak$\mathtt{T4\_truthful\_success\_agent}$ and uses $\rulename{Agent-Success}$ on standalone $\Agent{s}{\MPrin}$. The Policy analogue \allowbreak$\mathtt{T4\_progress\_gen\_policy}$ is the corresponding 1-line corollary of the parametric \allowbreak$\mathtt{T4\_progress\_gen\_healable}$ at $\tau = \Tpolicy$, discharged by $\Healable{\Tpolicy} = \mathsf{true}$. The parametric generalization \allowbreak$\mathtt{T4\_truthful\_success\_healable}$ takes any $\Healable{\tau}$ and applies $\rulename{Healable-Ok}$; the canonical nested case $\Tarr{\Tschema}$ (the clinical-trial \texttt{Array[crf]} pattern) is mechanized as the worked-example theorem \allowbreak$\mathtt{nested\_array\_of\_schema\_succeeds}$, which discharges the $\Healable{\Tarr{\Tschema}}$ premise by the recursive definition $\Healable{\Tarr{T}} = \Healable{T}$ and $\Healable{\Tschema} = \mathsf{true}$.
+Fix a let-redex $\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p_0}$ with $\MPrin
+\in \mathrm{dom}(\MPol)$ and continuation
+$\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$. By \defn{def:oracle-truthful} there
+exists some $\MErr'$ with $|\MErr'| \le \MRetry$ and a value $v$ with
+$\Oracle{s}{\MErr'}{\Tschema} \ni v$, $\mathsf{isValue}(v)$, and
+$\StType{v}{\Tschema}$. Note the witness may appear at \emph{some} heal context
+$\MErr'$, not necessarily the caller's current $\MErr$. Apply
+$\rulename{Healable-Ok}$ at $\tau = \Tschema$ (the $\Healable{\Tschema}$ side
+condition is immediate): all premises are discharged, so
+$\MConfig{\MErr'}{\MPol}{\Let{\Tschema}{\Gen{\Tschema}{s}{\MPrin}}{p_0}} \step
+\MConfig{\emptyset}{\MPol}{\Subst{p_0}{v}}$.
+
+The Arrow analogue follows the identical pattern at
+$\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$, and the Policy analogue at
+$\tau = \Tpolicy$ (discharged by $\Healable{\Tpolicy} = \mathsf{true}$). All
+three are corollaries of the single parametric rule $\rulename{Healable-Ok}$.
+The agent variant uses $\rulename{Agent-Success}$ on standalone
+$\Agent{s}{\MPrin}$. For nested healable types such as $\Tarr{\Tschema}$ (the
+clinical-trial \texttt{Array[crf]} pattern), the $\Healable{\Tarr{\Tschema}}$
+premise is discharged by the recursive definition $\Healable{\Tarr{T}} =
+\Healable{T}$.
 \end{sloppypar}
 
 \subsection{T4c: Progress-gen-Schema, Progress-agent}
 \label{app:proof-prog-c}
 
 \begin{sloppypar}
-These are wrappers around T4b: they add $\MPrin \in \mathrm{dom}(\MPol)$ and the continuation typeability $\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$ as explicit hypotheses and take a direct oracle witness $\exists~v.\ \mathsf{isValue}(v) \wedge \StType{v}{\Tschema} \wedge \Oracle{s}{\MErr}{\Tschema} \ni v$ at the caller's \emph{current} heal context. The conclusion $\exists~C'.\ C \step C'$ follows by applying $\rulename{Healable-Ok}$ at $\tau = \Tschema$ (resp.\ $\rulename{Agent-Success}$, whose self-healing opportunity at $\Tstring$ is non-healable so no continuation check is needed) exactly as in T4b but without the intermediate ``reach some $\MErr'$'' step. Mechanized as $\mathtt{T4\_progress\_gen}$ / $\mathtt{T4\_progress\_agent}$; the arrow analogue follows the same pattern at $\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$, again routed through $\rulename{Healable-Ok}$. The Policy analogue \allowbreak$\mathtt{T4\_progress\_gen\_policy}$ is the corresponding 1-line corollary of the parametric \allowbreak$\mathtt{T4\_progress\_gen\_healable}$ at $\tau = \Tpolicy$.
+T4c strengthens T4b by requiring the oracle witness at the caller's
+\emph{current} heal context $\MErr$ rather than at an existential $\MErr'$.
+Given $\MPrin \in \mathrm{dom}(\MPol)$ and
+$\TJok{\Gext{x}{\Tschema}}{p_0}{\tau'}$, the conclusion $\exists~C'.\ C \step
+C'$ follows by applying $\rulename{Healable-Ok}$ at $\tau = \Tschema$ (resp.\
+$\rulename{Agent-Success}$ for standalone agents) exactly as in T4b but without
+the intermediate ``reach some $\MErr'$'' step. Arrow and Policy analogues
+follow identically via $\rulename{Healable-Ok}$.
 \end{sloppypar}
 
 \subsection{Termination}
@@ -444,32 +582,20 @@ These are wrappers around T4b: they add $\MPrin \in \mathrm{dom}(\MPol)$ and the
 
 \begin{theorem}[Termination]
 \label{thm:pact-term}
-Let $C_0 = \MConfig{\emptyset}{\MPol_0}{e_0}$ be a well-formed initial configuration. Assume every \texttt{while}/\texttt{for} loop in $e_0$ terminates. Then every trace from $C_0$ either reaches a value configuration in finitely many steps (with the value either an ordinary $\mathsf{isValue}$ or the fail-closed sink $\errV$), or gets stuck at some oracle redex whose retry budget has been exhausted without a truthful response. There is no ill-formed intermediate configuration. If $\mathcal{O}$ is eventually-truthful at every oracle site encountered along the trace, the trace terminates in an ordinary value configuration.
+Let $C_0 = \MConfig{\emptyset}{\MPol_0}{e_0}$ be a well-formed initial configuration. Assume every \texttt{while}/\texttt{for} loop in $e_0$ terminates. Then every trace from $C_0$ either reaches a value configuration in finitely many steps (with the value either an ordinary $\mathsf{isValue}$ or the fail-closed sink $\errV$), or gets stuck at some oracle redex whose oracle never produces a well-typed, authorized response within budget. There is no ill-formed intermediate configuration. If $\mathcal{O}$ is eventually-truthful at every oracle site encountered along the trace, the trace terminates in an ordinary value configuration.
 \end{theorem}
+
+The semantics defines five possible outcomes for any terminating run:
+\begin{itemize}
+  \item \emph{success} (reduction reaches a value configuration),
+  \item \emph{type rejection} (a non-healable \texttt{gen} produced an ill-typed value and fired $\rulename{Gen-TypeErr}$, or the budget exhausted and fired $\rulename{Gen-Budget}$),
+  \item \emph{policy rejection} ($\rulename{Gen-PolHeal}$ consumed the full budget),
+  \item \emph{policy-install failure} (the deny-all guard or action-type check rejected an \texttt{enforce} policy after $\MRetry$ retries), or
+  \item \emph{oracle stall} (every oracle response inside budget was ill-typed at a healable $\tau$, so no rule fired and the trace got stuck).
+\end{itemize}
 
 \label{app:proof-term}
 The argument is on paper. Between two successive oracle firings, only pure-core and congruence rules fire. Pure-core reduction terminates on any expression whose $\texttt{while}$ and $\texttt{for}$ loops terminate (assumed of $e_0$); substitution is finitary and preserves the termination measure on loop-free code. At each oracle firing either $\MErr$ is flushed to $\emptyset$ (success, resetting $|\MErr|$ to $0$ by T1), or an $\ErrEv{\cdot}$ extends $\MErr$ by one, or one of the hard-error rules ($\rulename{Gen-TypeErr}$ at non-healable $\tau$, $\rulename{Gen-Budget}$) fires and the configuration steps to $\errV$ --- a terminal value with no outgoing transition. At a healable $\tau$ an ill-typed oracle response has no transition: the configuration is stuck, and the trace halts there without progressing to $\errV$ (this is the \emph{oracle stall} case of the error taxonomy). After at most $\MRetry + 1$ heals at a single oracle site, the configuration is either pushed into the budget-exhausted regime where $\rulename{Gen-Budget}$ fires deterministically, or has already succeeded. Under eventually-truthful $\mathcal{O}$, truthful-success is guaranteed at every site; since the number of oracle sites reached along the trace is finite (bounded by $|e_0|$ plus finitely many $\rulename{Eval-Success}$ expansions), the trace terminates in an ordinary value configuration. Otherwise the trace either terminates in an ordinary value, terminates in $\errV$, or gets stuck at an oracle redex whose oracle never produces a witness within budget; no ill-formed configuration is ever reached.
 
-\subsection{Auxiliary Definitions and Internal Boundaries}
-\label{app:aux-defs}
 
-\begin{sloppypar}
-\paragraph{Multi-step closure.} The reflexive-transitive closure $\step^{*}$ of $\step$ is mechanized as $\mathtt{Steps}$. Composite end-to-end progress comes in two flavours: an \emph{independent} statement bundling per-redex single-step progresses (\allowbreak$\mathtt{clinical\_trial\_progresses}$, one $\exists~C'.\ C \step C'$ per oracle/projection redex named in Figure~\ref{fig:clinical-trial}), and a \emph{sequential} statement chaining the redexes through a single trace (\allowbreak$\mathtt{ClinicalTrial.clinicalTrialPrefix\_steps}$ -- a 7-step $\mathtt{Steps}$ chain through Schema-gen, Policy-gen, Array[Schema]-gen, and the cost projection). The independent form is the natural progress lemma; the sequential form is the regression test that a single oracle/policy environment sustains the full prefix.
-\end{sloppypar}
-
-\begin{sloppypar}
-\paragraph{The \texttt{js}-projection boundary.} Field access in surface \pact is delegated to JavaScript: \texttt{js visit.cost} and \texttt{js visit.patient\_id} in Figure~\ref{fig:clinical-trial} are JS expressions that read fields off the materialized record through the Boa bridge. The Lean mechanization models this boundary internally with $\mathtt{Expr.proj}$ and the rules $\rulename{Proj\text{-}Cong}$ / $\allowbreak\rulename{Proj\text{-}Step}$: the surface grammar has no first-class \texttt{e.f} form, but the operational story of ``a record is well-formed iff every field read on it succeeds'' must be expressible to state the self-heal trigger. $\rulename{Proj\text{-}Step}$ is therefore the mechanization-only model of a $\mathtt{js}$-escape that performs a lookup; it carries the witness \allowbreak$\mathtt{fs.lookup\;f = some\;v}$ that grounds projection success (the field-witness G1).
-\end{sloppypar}
-
-\begin{sloppypar}
-\paragraph{T4 corollaries.} The headline progress lemma (T4b, T4c) is parametric over $\mathrm{Healable}\ \tau$. The four shape corollaries -- $\mathtt{T4\_truthful\_success}$ ($\tau = \Tschema$), \allowbreak$\mathtt{T4\_truthful\_success\_arrow}$ ($\tau = \Tarrow{T_1 \to \cdots \to T_n}{T'}$), \allowbreak$\mathtt{T4\_progress\_gen\_policy}$ ($\tau = \Tpolicy$), and the $\Tarr{\Tschema}$ instance proved in \allowbreak$\mathtt{nested\_array\_of\_schema\_succeeds}$ -- are 1-line specializations of the parametric \allowbreak$\mathtt{T4\_truthful\_success\_healable}$.
-\end{sloppypar}
-
-\begin{sloppypar}
-\paragraph{Forward field-access analysis.} The runtime refinement of the static continuation type-check is the syntactic analysis \allowbreak$\mathtt{Expr.fieldSitesAt} : \mathtt{Expr} \to \mathtt{Nat} \to \mathtt{List\ String}$. At each \texttt{let}-gen site the analysis collects every projection on the bound variable in the continuation; the materialized record must satisfy \allowbreak$\mathtt{Value.recordSatisfies}$ on the resulting list, otherwise the mechanization-only refinement \allowbreak$\rulename{Let\text{-}Gen\text{-}Heal\text{-}RecordFields}$ fires --- a specialization of $\rulename{Healable-Heal}$ that detects record/field-access shape mismatches at the granularity Lean models them. The analysis is over-approximate (no path-sensitivity, no element-field tracking inside \texttt{forE} over arrays of records) and is sound by construction: success is admitted only when every \emph{syntactically reachable} forward projection is satisfied.
-\end{sloppypar}
-
-\begin{sloppypar}
-\paragraph{Principal-scope preservation.} Principal binders ($\Erestrict{\MPrin}$, $\Eroot$) introduce de~Bruijn-indexed references through \allowbreak$\mathtt{PrincRef.bvar}$. The depth-indexed predicate \allowbreak$\mathtt{Expr.princOk}\ d$ holds when every $\mathtt{PrincRef.bvar}\ n$ in the expression satisfies $n < d$. We prove \allowbreak$\mathtt{Step.preserves\_princOk}$ for arbitrary $d$: if $\mathtt{Expr.princOk}\ d\ C.\mathtt{expr}$ and \allowbreak$\mathtt{Store.princOk}\ C.\mathtt{store}$ hold and $C \step C'$, then both invariants hold for $C'$. The store invariant is depth-0 (closed values only) and is made inductive across $\rulename{Let\text{-}Princ\text{-}Cong}$ by carrying explicit $\mathtt{Value.princOk}\ 0\ v = \mathsf{true}$ premises on the value-introducing rules ($\rulename{Var\text{-}Decl\text{-}Bind}$, $\rulename{Assign\text{-}Write}$, $\rulename{Let\text{-}Princ\text{-}Value}$). The multi-step lift \allowbreak$\mathtt{Steps.preserves\_princOk}$ and the depth-0 corollary \allowbreak$\mathtt{principal\_indices\_bounded}$ together discharge the resolution claim: starting from a closed top-level program, every reachable configuration has all $\mathtt{PrincRef.bvar}$ indices bounded by the number of enclosing $\mathtt{letPrinc}$ binders, so no unresolved principal can be referenced at runtime.
-\end{sloppypar}
 

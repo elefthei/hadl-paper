@@ -21,7 +21,7 @@
 
 \begin{document}
 
-\title{Gradual Validation for Agentic Workflow Programs}
+\title{Gradual Validation and Self-Healing for Agentic Programs}
 
 \authoranon{
 \author{Theodoros Tsampouris}
@@ -55,14 +55,25 @@
 \keywords{domain-specific languages, agentic workflows, gradual typing, authorization, Cedar, LLM agents}
 
 \begin{abstract}
-  Effective use of LLM CLIs requires meticulous use of plan mode. A plan is a sequence of steps in natural language to be executed by the agent. Our central observation is that agentic plans are programs, which we call \emph{agentic workflows}. If plans are programs, then type systems, static analysis, and authorization semantics should apply directly. A deeper observation is that the LLM is not merely a value producer but a generator of program structure. Tool calls can produce types that govern subsequent data, workflows that will be executed as subroutines, and policies that restrict future operations.
-  We present Pact (Programmatic Agent Control Types), a typed imperative domain-specific language in which human interaction, LLM tool invocation, and LLM reasoning are first-class typed expressions composable with mutable state, unbounded loops, structured iteration, and nested workflow composition. The central mechanism is \emph{gradual validation}, a staged re-checking discipline under which types, workflows, and policies produced by an LLM, are validated at the point of generation, against the context of the rest of the program.
-As a result, we derive a programming language for agentic workflows with valuable safety properties, such as catching
-structural errors early and reducing output token consumption nearly threefold compared to
-assertion-based baselines in our clinical trial evaluation (1,732 vs.
-    4,605 output tokens), and completing in roughly half the wall clock time.
-Finally, Pact employs a \emph{self-healing} mechanism by rerunning failed LLM calls with the additional context of the violated constraint and the recorded error,
-    turning structural errors into improved LLM output instead of aborts.
+  Effective use of LLM CLIs requires careful use of plan mode---a sequence of
+  natural-language steps to be executed by the agent. Our central observation
+  is that such plans are programs, which we call \emph{agentic workflows}. If
+  plans are programs, then program safety techniques such as type systems, static
+  analysis, and authorization semantics should apply directly. A deeper
+  observation is that the LLM is not merely a producer of values, but also a
+  generator of program structure. Tool calls can produce types that govern
+  subsequent data, workflows that are executed as subroutines, and policies
+  that restrict future operations. We present Pact (Programmatic Agent Control
+  Types), a typed imperative domain-specific language in which human
+  interaction, LLM tool invocation, and LLM reasoning are first-class typed
+  expressions. \pact introduces a novel safety mechanism called
+  \emph{gradual validation}, together with a recovery mechanism called
+  \emph{self-healing}, under which types, workflows, and policies produced by
+  an LLM are validated at the point of generation against the surrounding
+  program context. As a result, we obtain a programming language for agentic
+  workflows with valuable safety properties that are formally verified, as well as practical benefits: self-healing enables
+  long-running tasks, reduces output token consumption by nearly threefold, and
+  halves wall-clock time compared to assertion-based baselines.
 \end{abstract}
 
 \maketitle

@@ -58,7 +58,7 @@ The action and resource of any specific access span the filesystem
 (\texttt{Read}/\texttt{Write}/\texttt{Exec} on files and directories)
 and are decided just-in-time by the runtime monitor of
 \sect{sec:implementation}, not at the redex. The runtime monitor sits
-outside the mechanized core: Lean verifies the static admissibility
+outside the mechanized core: the formal development verifies the static admissibility
 premise and the install discipline; the action/resource decision at
 each filesystem access is enforced by the prototype runtime only.
 \emph{Well-formedness} $\WF{C}$ requires both $|\MErr| \le \MRetry$ and
@@ -121,7 +121,7 @@ the Policy case ($\Healable{\Tpolicy} = \mathsf{true}$) and nested
 compound healable types such as $\Tarr{\Tschema}$ from the
 clinical-trial \texttt{Array[crf]} pattern (Appendix~\ref{app:rules}).
 For arrows, $\Subst{p}{v}$ substitutes the oracle-returned closure into
-the continuation, mechanized via the \texttt{lean-subst} framework.
+the continuation, mechanized via capture-avoiding substitution.
 
 T2 (\sect{thm:pact-soundness}) guarantees that every committed value
 other than the distinguished fail-closed sink $\errV$ carries a runtime
@@ -156,7 +156,7 @@ on principal denial.
 
 \begin{sloppypar}
 The pure-core rules ($\rulename{If-True/False}$, $\rulename{While}$,
-$\rulename{For-Nil/Cons}$, $\rulename{Js}$, $\rulename{Seq}$,
+$\rulename{For-Nil/Cons}$, $\rulename{Seq}$,
 $\rulename{Ask}$, $\rulename{Say}$, $\rulename{Enforce-Install}$) follow
 ordinary left-to-right CBV evaluation; $\rulename{For-Cons}$ uses
 substitution to bind the iteration variable. The only rule that updates
@@ -164,8 +164,7 @@ $\MPol$ is $\rulename{Enforce-Install}$, whose install operation rejects
 blanket $\texttt{forbid}$ under a deny-all guard, rejects unknown action
 types, and merges rules append-only. These checks ensure that
 installation can only shrink the allow set
-($\Allow{\MPol'} \subseteq \Allow{\MPol}$), mechanized as
-$\mathtt{policyInstall\_shrinks}$ and yielding T3.
+($\Allow{\MPol'} \subseteq \Allow{\MPol}$), yielding T3.
 \end{sloppypar}
 
 \subsection{Correctness}
@@ -193,8 +192,7 @@ feedback history within budget yields a well-typed authorized response.
 \end{definition}
 
 \begin{sloppypar}
-This matches the existential shape of the Lean predicate
-$\mathtt{Oracle.eventuallyTruthful}$: it witnesses some well-typed
+This matches the existential shape of the oracle predicate: it witnesses some well-typed
 response at \emph{some} heal context, not necessarily the caller's
 current $\MErr$.
 \end{sloppypar}
@@ -217,15 +215,15 @@ continuation type-checks or the budget is spent. Together, T1 says the
 budget and store invariants survive every step, T2 says every committed
 non-sink value carries a runtime type, T3 says authority shrinks
 monotonically, and T4 says an oracle redex either commits, heals, or
-fails closed --- never gets stuck. All four are verified in Lean.
+fails closed --- never gets stuck. All four are mechanized.
 
 \begin{theorem}[Soundness]
 \label{thm:pact-soundness}
 For oracle $\mathcal{O}$ and step $C \step C'$:
 \begin{enumerate}
-  \item[\textbf{T1}] (WF-preservation) $\WF{C} \Rightarrow \WF{C'}$.
-  \item[\textbf{T2}] (non-sink typeability) if $C' = \MConfigS{\MErr'}{\MPol'}{\MStore'}{v}$ with $\mathsf{isValue}(v)$ and $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$.
-  \item[\textbf{T3}] (policy monotonicity) $\Allow{\MPol'} \subseteq \Allow{\MPol}$.
+  \item[\textbf{T1}] (WF-preservation) if $~\WF{C}$ then $\WF{C'}$.
+  \item[\textbf{T2}] (non-sink typeability) if $~C' = \MConfigS{\MErr'}{\MPol'}{\MStore'}{v}$ with $\mathsf{isValue}(v)$ and $v \neq \errV$, then $\exists~\tau.\ \StType{v}{\tau}$.
+  \item[\textbf{T3}] (policy monotonicity) $~\Allow{\MPol'} \subseteq \Allow{\MPol}$.
 \end{enumerate}
 \end{theorem}
 
@@ -257,10 +255,8 @@ corollaries together with the trace-level termination argument
 (Appendix~\ref{app:soundness}, \ref{app:term}).
 
 \begin{sloppypar}
-\noindent\textbf{Scope.} T1--T4c are mechanized in Lean~4
-sorry-free and depending only on the
-standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$,
-$\mathtt{Quot.sound}$, with a build-time axiom guard.
+\noindent\textbf{Scope.} T1--T4c are mechanized and depend only on
+standard meta-axioms.
 Trace-level termination is prose-only. Progress conclusions assume an
 eventually-truthful oracle; without that assumption T1--T3 still hold
 per step, and oracle redexes either reach $\errV$ via the explicit sink
@@ -268,4 +264,3 @@ rules or halt at the redex. The threat-model gaps of
 \sect{sec:design-threat} are outside the scope of soundness; practical
 claims are the subject of \sect{sec:evaluation}.
 \end{sloppypar}
-

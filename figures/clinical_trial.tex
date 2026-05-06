@@ -1,4 +1,4 @@
-\begin{figure}[H]
+\begin{figure}[t]
 \begin{lstlisting}[language=pact,showstringspaces=false]
 @retries 3
 
@@ -9,18 +9,18 @@ workflow clinical_trial() -> String {
   let policy: Policy = gen "Coordinators cannot see data in
     unblinded folder"
   enforce policy
-  let num_visits = ask "How many patient visits to simulate?"
-  let visits: Array[crf] =
-    gen "Simulate CRF info for `num_visits` patient visits for `trial`"
-    as coordinator
+  let num_visits =
+    ask "How many patient visits to simulate?"
+  let visits: Array[crf] = gen "Simulate CRF info for 
+    `num_visits` patient visits for `trial`" as coordinator
   var total_cost: Number = 0
   for visit in visits {
-    total_cost = js (total_cost + visit.cost)
-    say "Visit `js visit.patient_id`: cost `js visit.cost`"
+    total_cost = total_cost + visit.cost
+    say "Visit `visit.patient_id`: cost `visit.cost`"
   }
   agent "Write final report for the `visits`"
 }
 \end{lstlisting}
-\caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf}), gradual policy typing (\texttt{enforce policy}), and per-invocation Cedar authorization. \texttt{@retries 3} enables feedback-driven self-healing when the generated schema lacks a later-accessed field.}
+\caption{Clinical-trial workflow demonstrating gradual schema typing (\texttt{crf}), gradual policy typing (\texttt{enforce policy}), and per-LLM-call principal authorization (coordinator).}
 \label{fig:clinical-trial}
 \end{figure}

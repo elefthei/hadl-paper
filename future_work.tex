@@ -6,7 +6,7 @@ tractability, and several of those trade-offs open concrete directions
 for future work. The path-insensitive analysis, the restricted type 
 structure, and the sequential execution model each represent a 
 principled simplification that could be relaxed without abandoning 
-the core guarantees. We discuss the most promising extensions below.
+the core guarantees. We discuss these promising extensions below.
 
 \paragraph{Path-sensitive continuation analysis.}
 The forward field-access analysis that drives schema self-healing 
@@ -43,14 +43,15 @@ discipline more expressive without changing its fundamental
 structure.
 
 \paragraph{Effect tracking for host-language escapes.}
-Inline \texttt{js} blocks execute arbitrary JavaScript under the 
-host runtime's ambient authority. The current type system treats 
-these blocks as oracular, accepting whatever value the JavaScript 
+Host-language expressions (arithmetic, field projections, comparisons) 
+execute arbitrary JavaScript under the host runtime's ambient 
+authority via the embedded Boa engine. The current type system treats 
+these expressions as oracular, accepting whatever value the JavaScript 
 engine produces without modelling its side effects. This means 
-that a \texttt{js} block can perform file I/O, network requests, 
+that a host-language expression can perform file I/O, network requests, 
 or other host-side effects that are invisible to the \pact{} type 
 checker and to the Cedar authorization model. An effect system 
-that tracks which capabilities a \texttt{js} block exercises would 
+that tracks which capabilities these expressions exercise would 
 allow the runtime to enforce that host-language escapes are 
 consistent with the installed policy, extending the 
 language-level control that \pact{} currently provides for 
