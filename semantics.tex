@@ -258,9 +258,9 @@ corollaries together with the trace-level termination argument
 
 \begin{sloppypar}
 \noindent\textbf{Scope.} T1--T4c are mechanized in Lean~4
-(\texttt{mechanization/Pact/}), sorry-free and depending only on the
+sorry-free and depending only on the
 standard meta-axioms $\mathtt{propext}$, $\mathtt{Classical.choice}$,
-$\mathtt{Quot.sound}$ (build-time guard: \texttt{AxiomCheck.lean}).
+$\mathtt{Quot.sound}$, with a build-time axiom guard.
 Trace-level termination is prose-only. Progress conclusions assume an
 eventually-truthful oracle; without that assumption T1--T3 still hold
 per step, and oracle redexes either reach $\errV$ via the explicit sink
